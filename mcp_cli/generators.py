@@ -41,6 +41,37 @@ class OpenAPIAnalysis:
     estimated_complexity: str
     potential_issues: List[str]
 
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert analysis to dictionary for serialization"""
+        return {
+            "summary": {
+                "tools_count": self.tools_count,
+                "resources_count": self.resources_count,
+                "estimated_complexity": self.estimated_complexity,
+                "authentication_schemes": self.authentication_schemes
+            },
+            "endpoints": [
+                {
+                    "path": ep.get("path", ""),
+                    "method": ep.get("method", ""),
+                    "operation_id": ep.get("operation_id", ""),
+                    "summary": ep.get("summary", ""),
+                    "description": ep.get("description", ""),
+                    "parameters_count": len(ep.get("parameters", []))
+                }
+                for ep in self.endpoints
+            ],
+            "models": [
+                {
+                    "name": model.get("name", ""),
+                    "type": model.get("type", ""),
+                    "properties_count": len(model.get("properties", {}))
+                }
+                for model in self.models
+            ],
+            "potential_issues": self.potential_issues
+        }
+
 class BaseGenerator:
     """Base class for all generators with common functionality"""
     

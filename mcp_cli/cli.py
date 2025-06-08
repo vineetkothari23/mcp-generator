@@ -297,11 +297,14 @@ def analyze(ctx, spec, output, format):
         analyzer = cli_instance.generators["openapi"]
         analysis_result = analyzer.analyze_spec(openapi_data)
         
+        # Convert analysis result to dict for serialization
+        analysis_dict = analysis_result.to_dict()
+        
         # Format output
         if format == 'json':
-            output_data = json.dumps(analysis_result, indent=2)
+            output_data = json.dumps(analysis_dict, indent=2)
         else:
-            output_data = yaml.dump(analysis_result, default_flow_style=False)
+            output_data = yaml.dump(analysis_dict, default_flow_style=False)
         
         if output:
             with open(output, 'w') as f:
