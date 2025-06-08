@@ -40,3 +40,95 @@ class {{ class_name }}Tools:
             ),
             {% endfor %}
         ]
+    
+    async def execute_tool(self, name: str, arguments: Dict[str, Any]) -> Any:
+        """
+        Execute a tool by name with given arguments
+        
+        Args:
+            name: Tool name to execute
+            arguments: Tool arguments dictionary
+            
+        Returns:
+            Any: Tool execution result
+            
+        Raises:
+            ValueError: If tool is not found
+        """
+        {% for operation in operations %}
+        if name == "{{ operation.tool_name }}":
+            return await self._{{ operation.tool_name }}(arguments)
+        {% endfor %}
+        
+        raise ValueError(f"Unknown tool: {name}")
+    
+    {% for operation in operations %}
+    async def _{{ operation.tool_name }}(self, arguments: Dict[str, Any]) -> Any:
+        """
+        {{ operation.summary or operation.description or 'Execute API operation' }}
+        
+        Args:
+            arguments: Tool arguments containing API parameters
+            
+        Returns:
+            Any: API response data
+        """
+        try:
+            logger.info(f"Executing tool {{ operation.tool_name }} with arguments: {arguments}")
+            
+            # Validate required parameters
+            {% for param in operation.parameters %}
+            {% if param.required %}
+            if "{{ param.name }}" not in arguments:
+                raise ValueError("Required parameter '{{ param.name }}' is missing")
+            {% endif %}
+            {% endfor %}
+            
+            # Prepare API call parameters
+            api_params = {}
+            {% for param in operation.parameters %}
+            {% if param.in == 'path' %}
+            # Path parameter: {{ param.name }}
+            if "{{ param.name }}" in arguments:
+                api_params["{{ param.name }}"] = arguments["{{ param.name }}"]
+            {% elif param.in == 'query' %}
+            # Query parameter: {{ param.name }}
+            if "{{ param.name }}" in arguments:
+                api_params["{{ param.name }}"] = arguments["{{ param.name }}"]
+            {% endif %}
+            {% endfor %}
+            
+            # Get API instance
+            api_instance = self.{{ operation.api_class|lower }}
+            
+            # Make API call
+            {% if operation.method.upper() == 'GET' %}
+            result = api_instance.{{ operation.operation_name }}(**api_params)
+            {% elif operation.method.upper() == 'POST' %}
+            result = api_instance.{{ operation.operation_name }}(**api_params)
+            {% elif operation.method.upper() == 'PUT' %}
+            result = api_instance.{{ operation.operation_name }}(**api_params)
+            {% elif operation.method.upper() == 'DELETE' %}
+            result = api_instance.{{ operation.operation_name }}(**api_params)
+            {% elif operation.method.upper() == 'PATCH' %}
+            result = api_instance.{{ operation.operation_name }}(**api_params)
+            {% else %}
+            result = api_instance.{{ operation.operation_name }}(**api_params)
+            {% endif %}
+            
+            # Format response
+            if result is None:
+                return "Operation completed successfully"
+            elif hasattr(result, 'to_dict'):
+                return result.to_dict()
+            elif isinstance(result, (dict, list, str, int, float, bool)):
+                return result
+            else:
+                return str(result)
+                
+        except Exception as e:
+            logger.error(f"Error executing tool {{ operation.tool_name }}: {e}")
+            error_msg = f"Error executing {{ operation.tool_name }}: {str(e)}"
+            return {"error": error_msg, "tool": "{{ operation.tool_name }}"}
+    
+    {% endfor %}
