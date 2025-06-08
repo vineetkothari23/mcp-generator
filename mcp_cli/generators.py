@@ -845,7 +845,27 @@ class ConfigGenerator(BaseGenerator):
             ) 
 # Add new generator class
 class OpenAPIEnhancedGenerator(BaseGenerator):
-    """Enhanced OpenAPI generator using openapi-generator"""
+    """Enhanced OpenAPI generator using openapi-generator
+    class OpenAPIEnhancedGenerator:
+    def _generate_mcp_tools(self, project_path, config, client_analysis):
+        # 1. Create tool mapper
+        tool_mapper = MCPToolMapper(client_analysis)
+        
+        # 2. Get mapping metadata (not code!)
+        tool_mappings = tool_mapper.generate_tool_implementation_mapping()
+        test_mappings = tool_mapper.generate_tool_test_mapping()
+        
+        # 3. Use TestGenerator with mappings
+        test_generator = TestGenerator()
+        test_generator.generate_tool_tests(
+            project_path, 
+            config, 
+            test_mappings  # Pass mapping data
+        )
+        
+        # 4. Generate tool implementations using mappings
+        self._generate_tools_from_mappings(project_path, config, tool_mappings)
+    """
     
     def __init__(self):
         super().__init__()

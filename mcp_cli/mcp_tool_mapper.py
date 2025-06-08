@@ -306,223 +306,38 @@ class MCPToolMapper:
         # Remove leading/trailing underscores
         text = text.strip('_')
         
-        return text
-        
-    def generate_tool_implementations(self) -> str:
-        """
-        Generate Python code for MCP tool implementations
-        
-        Creates complete Python code that implements MCP tools for each
-        API operation, including:
-        - Tool registration with proper schemas
-        - Implementation methods that call the API client
-        - Error handling and response formatting
-        - Type hints and documentation
-        
-        Returns:
-            str: Complete Python code for tool implementations
-            
-        Example:
-            mapper = MCPToolMapper(client_analysis)
-            code = mapper.generate_tool_implementations()
-            
-            # Generated code includes:
-            # - Tool registration decorators
-            # - Implementation methods
-            # - Error handling
-            # - Response formatting
-        """
-        from jinja2 import Environment, FileSystemLoader
-        import os
-        
-        # Get tool definitions
-        tool_definitions = self.generate_tool_definitions()
-        
-        # Setup Jinja2 environment
-        template_dir = os.path.join(os.path.dirname(__file__), 'templates')
-        env = Environment(loader=FileSystemLoader(template_dir))
-        
-        # Load the tool implementations template
-        template = env.get_template('tool_implementations.py.j2')
-        
-        # Prepare template context
-        context = {
-            'tool_definitions': tool_definitions,
-            'client_analysis': self.client_analysis,
+        return text        
+        def generate_tool_implementation_mapping(self) -> Dict[str, Any]:
+        """Generate mapping data for tool implementations"""
+        return {
+            'tool_definitions': self.generate_tool_definitions(),
             'api_classes': self.client_analysis.api_classes,
             'operations': self.client_analysis.operations,
-            'models': self.client_analysis.models,
-            'client_package_name': self.client_analysis.client_package_name or 'generated_client'
-        }
-        
-        # Render the template
-        generated_code = template.render(**context)
-        
-        return generated_code
-    
-    def generate_tools_for_template(self, template_type: str = "openapi_enhanced", 
-                                   project_name: str = "Generated API", 
-                                   class_name: str = "GeneratedAPI") -> str:
-        """
-        Generate Python code for MCP tools using the tools.py.j2 template
-        
-        This method is compatible with the tools.py.j2 template structure and
-        generates code that follows the expected pattern for MCP tools.
-        
-        Args:
-            template_type: Type of template to use ("openapi_enhanced", "openapi", "python")
-            project_name: Name of the project for documentation
-            class_name: Name of the tools class to generate
-            
-        Returns:
-            str: Complete Python code for MCP tools
-            
-        Raises:
-            ValueError: If template type is not supported
-            FileNotFoundError: If template files are not found
-            
-        Example:
-            mapper = MCPToolMapper(client_analysis)
-            code = mapper.generate_tools_for_template(
-                template_type="openapi_enhanced",
-                project_name="Pet Store API",
-                class_name="PetStore"
-            )
-        """
-        from jinja2 import Environment, FileSystemLoader
-        import os
-        
-        # Validate template compatibility
-        if not self.validate_template_compatibility(template_type):
-            supported_types = self.get_supported_template_types()
-            raise ValueError(
-                f"Template type '{template_type}' is not supported. "
-                f"Supported types: {', '.join(supported_types)}"
-            )
-        
-        # Get tool definitions
-        tool_definitions = self.generate_tool_definitions()
-        
-        # Setup Jinja2 environment
-        template_dir = os.path.join(os.path.dirname(__file__), 'templates', template_type)
-        env = Environment(loader=FileSystemLoader(template_dir))
-        
-        # Load the tools template
-        try:
-            template = env.get_template('tools.py.j2')
-        except Exception as e:
-            raise FileNotFoundError(f"Could not load tools.py.j2 template from {template_dir}: {e}")
-        
-        # Convert tool definitions to operations format expected by template
-        operations = []
-        for tool_def in tool_definitions:
-            operation = {
-                'tool_name': tool_def.name,
-                'summary': tool_def.description,
-                'description': tool_def.description,
-                'input_schema': tool_def.input_schema,
-                'method': tool_def.operation.method if tool_def.operation else 'GET',
-                'path': tool_def.operation.path if tool_def.operation else '/',
-                'operation_id': tool_def.name,
-                'parameters': self._convert_operation_parameters(tool_def.operation) if tool_def.operation else [],
-                'api_class': tool_def.operation.api_class if tool_def.operation else 'DefaultApi',
-                'operation_name': tool_def.operation.name if tool_def.operation else tool_def.name
+            'template_context': {
+                'project_name': self.project_name,
+                'class_name': self.class_name,
+                # ... other context data
             }
-            operations.append(operation)
-        
-        # Prepare template context
-        context = {
-            'project_name': project_name,
-            'class_name': class_name,
+        }
+    
+    def generate_tool_test_mapping(self) -> Dict[str, Any]:
+        """Generate mapping data for tool tests"""
+        return {
+            'tools_to_test': self.generate_tool_definitions(),
+            'test_scenarios': self._generate_test_scenarios(),
+            'mock_data': self._generate_mock_data(),
+            'api_operations': self.client_analysis.operations
+        }
+    
+    def generate_tool_implementation_mapping(self) -> Dict[str, Any]:
+        """Generate mapping data for tool implementations"""
+        return {
+            'tool_definitions': self.generate_tool_definitions(),
             'api_classes': self.client_analysis.api_classes,
-            'operations': operations,
-            'models': self.client_analysis.models,
-            'client_package_name': self.client_analysis.client_package_name or 'generated_client'
-        }
-        
-        # Render the template
-        generated_code = template.render(**context)
-        
-        return generated_code
-    
-    def _convert_operation_parameters(self, operation: Operation) -> List[Dict[str, Any]]:
-        """
-        Convert operation parameters to format expected by templates
-        
-        Args:
-            operation: API operation with parameters
-            
-        Returns:
-            List[Dict[str, Any]]: Parameters in template-expected format
-        """
-        if not operation or not operation.parameters:
-            return []
-        
-        converted_params = []
-        for param in operation.parameters:
-            converted_param = {
-                'name': param.get('name', 'unknown'),
-                'in': param.get('in', 'query'),
-                'description': param.get('description', ''),
-                'required': param.get('required', False),
-                'type': param.get('type', 'string'),
-                'schema': {
-                    'type': param.get('type', 'string')
-                }
+            'operations': self.client_analysis.operations,
+            'template_context': {
+                'project_name': self.project_name,
+                'class_name': self.class_name,
+                # ... other context data
             }
-            converted_params.append(converted_param)
-        
-        return converted_params
-    
-    def generate_tool_tests(self) -> str:
-        """Generate tests for MCP tools"""
-        # TODO: Implement tool test generation
-        pass
-    
-    def validate_template_compatibility(self, template_type: str) -> bool:
-        """
-        Validate that the specified template type is supported
-        
-        Args:
-            template_type: Template type to validate
-            
-        Returns:
-            bool: True if template type is supported
-        """
-        import os
-        
-        supported_templates = ["openapi_enhanced", "openapi", "python"]
-        if template_type not in supported_templates:
-            return False
-        
-        # Check if template directory exists
-        template_dir = os.path.join(os.path.dirname(__file__), 'templates', template_type)
-        if not os.path.exists(template_dir):
-            return False
-        
-        # Check if tools.py.j2 exists in the template directory
-        tools_template = os.path.join(template_dir, 'tools.py.j2')
-        return os.path.exists(tools_template)
-    
-    def get_supported_template_types(self) -> List[str]:
-        """
-        Get list of supported template types
-        
-        Returns:
-            List[str]: List of supported template type names
-        """
-        import os
-        
-        template_base_dir = os.path.join(os.path.dirname(__file__), 'templates')
-        if not os.path.exists(template_base_dir):
-            return []
-        
-        supported_types = []
-        for item in os.listdir(template_base_dir):
-            template_dir = os.path.join(template_base_dir, item)
-            if os.path.isdir(template_dir):
-                tools_template = os.path.join(template_dir, 'tools.py.j2')
-                if os.path.exists(tools_template):
-                    supported_types.append(item)
-        
-        return supported_types
+        }
