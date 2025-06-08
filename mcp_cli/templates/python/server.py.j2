@@ -1,0 +1,165 @@
+"""
+{{ project_name }} - MCP Server Implementation
+
+This module implements the main MCP server for {{ service_name }}.
+Generated automatically by mcp-cli tool.
+
+Author: {{ get('author', 'Developer') }}
+Version: {{ get('version', '1.0.0') }}
+"""
+
+import asyncio
+import logging
+from typing import Dict, Any, List, Optional
+from pathlib import Path
+
+from mcp.server import Server
+from mcp.types import (
+    Tool, TextContent, ImageContent, EmbeddedResource,
+    LoggingLevel, AnyUrl
+)
+from pydantic import BaseModel
+
+from .config import {{ service_name|pascal_case }}Config
+from .client import {{ service_name|pascal_case }}Client
+from .tools import {{ service_name|pascal_case }}Tools
+from .models import ServerResponse, ErrorResponse
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+class {{ service_name|pascal_case }}Server:
+    """
+    Main MCP server class for {{ service_name }}
+    
+    This server provides MCP-compliant access to {{ service_name }} functionality
+    through standardized tools and resources.
+    """
+    
+    def __init__(self, config: {{ service_name|pascal_case }}Config):
+        """
+        Initialize the MCP server
+        
+        Args:
+            config: Server configuration object
+            
+        Example:
+            config = {{ service_name|pascal_case }}Config()
+            server = {{ service_name|pascal_case }}Server(config)
+            await server.start()
+        """
+        self.config = config
+        self.server = Server(name="{{ project_name }}")
+        self.client = {{ service_name|pascal_case }}Client(config)
+        self.tools = {{ service_name|pascal_case }}Tools(self.server, self.client)
+        
+        # Setup server handlers
+        self._setup_handlers()
+        
+        logger.info(f"Initialized {{ project_name }} MCP server v{config.version}")
+    
+    def _setup_handlers(self):
+        """Setup MCP server event handlers"""
+        
+        @self.server.list_tools()
+        async def list_tools() -> List[Tool]:
+            """
+            List all available tools
+            
+            Returns:
+                List[Tool]: Available MCP tools
+            """
+            return await self.tools.list_available_tools()
+        
+        @self.server.list_resources()
+        async def list_resources() -> List[EmbeddedResource]:
+            """
+            List all available resources
+            
+            Returns:
+                List[EmbeddedResource]: Available MCP resources
+            """
+            return []  # Implement resource listing as needed
+        
+        @self.server.read_resource()
+        async def read_resource(uri: AnyUrl) -> str:
+            """
+            Read a specific resource
+            
+            Args:
+                uri: Resource URI to read
+                
+            Returns:
+                str: Resource content
+            """
+            return f"Resource content for {uri}"
+        
+        @self.server.call_tool()
+        async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
+            """
+            Execute a tool with given arguments
+            
+            Args:
+                name: Tool name to execute
+                arguments: Tool arguments
+                
+            Returns:
+                List[TextContent]: Tool execution results
+                
+            Raises:
+                ValueError: If tool is not found or arguments are invalid
+            """
+            try:
+                result = await self.tools.execute_tool(name, arguments)
+                return [TextContent(type="text", text=str(result))]
+                
+            except Exception as e:
+                logger.error(f"Tool execution failed: {name} - {str(e)}")
+                error_msg = f"Error executing tool '{name}': {str(e)}"
+                return [TextContent(type="text", text=error_msg)]
+    
+    async def start(self):
+        """
+        Start the MCP server
+        
+        This method starts the server and begins listening for MCP protocol messages.
+        """
+        try:
+            logger.info(f"Starting {{ project_name }} MCP server on {self.config.host}:{self.config.port}")
+            await self.server.run()
+            
+        except Exception as e:
+            logger.error(f"Failed to start server: {str(e)}")
+            raise
+    
+    async def stop(self):
+        """Stop the MCP server gracefully"""
+        logger.info("Stopping {{ project_name }} MCP server")
+        # Cleanup resources if needed
+        await self.client.close()
+
+async def main():
+    """
+    Main entry point for the MCP server
+    
+    Loads configuration and starts the server.
+    """
+    # Load configuration
+    config = {{ service_name|pascal_case }}Config()
+    
+    # Create and start server
+    server = {{ service_name|pascal_case }}Server(config)
+    
+    try:
+        await server.start()
+    except KeyboardInterrupt:
+        logger.info("Received shutdown signal")
+    except Exception as e:
+        logger.error(f"Server error: {str(e)}")
+        raise
+    finally:
+        await server.stop()
+
+if __name__ == "__main__":
+    asyncio.run(main()) 

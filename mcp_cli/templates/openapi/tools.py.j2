@@ -1,0 +1,164 @@
+"""
+{{ project_name }} - MCP Tools Implementation
+
+This module contains MCP tool definitions generated from OpenAPI specification.
+Each API endpoint is mapped to an MCP tool with proper parameter validation.
+
+Generated automatically by mcp-cli from OpenAPI spec.
+"""
+
+import logging
+from typing import Dict, Any, List, Optional, Union
+from mcp.server import Server
+from mcp.types import Tool, TextContent
+from pydantic import ValidationError
+
+from .client import {{ service_name|pascal_case }}Client
+from .models import *
+
+logger = logging.getLogger(__name__)
+
+class {{ service_name|pascal_case }}Tools:
+    """
+    MCP tools implementation for {{ service_name }}
+    
+    This class provides MCP-compliant tools generated from OpenAPI operations.
+    Each tool corresponds to an API endpoint with proper parameter validation.
+    """
+    
+    def __init__(self, server: Server, client: {{ service_name|pascal_case }}Client):
+        """
+        Initialize tools with server and client instances
+        
+        Args:
+            server: MCP server instance
+            client: API client for making requests
+        """
+        self.server = server
+        self.client = client
+        self._register_tools()
+    
+    def _register_tools(self):
+        """Register all available tools with the MCP server"""
+        # Tools are registered using decorators
+        pass
+    
+    async def list_available_tools(self) -> List[Tool]:
+        """
+        Get list of all available tools
+        
+        Returns:
+            List[Tool]: List of available MCP tools
+        """
+        tools = []
+        
+        {% for endpoint in endpoints %}
+        # Tool for {{ endpoint.method }} {{ endpoint.path }}
+        tools.append(Tool(
+            name="{{ endpoint.operation_id or (endpoint.method.lower() + '_' + endpoint.path.replace('/', '_').replace('{', '').replace('}', '')) }}",
+            description="{{ endpoint.summary or endpoint.description or 'API operation' }}",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    {% for param in endpoint.parameters %}
+                    "{{ param.name }}": {
+                        "type": "{{ param.schema.type if param.schema else 'string' }}",
+                        "description": "{{ param.description or param.name }}"
+                        {% if param.required %}, "required": true{% endif %}
+                    }{% if not loop.last %},{% endif %}
+                    {% endfor %}
+                },
+                {% if endpoint.parameters %}
+                "required": [
+                    {% for param in endpoint.parameters %}
+                    {% if param.required %}"{{ param.name }}"{% if not loop.last %},{% endif %}{% endif %}
+                    {% endfor %}
+                ]
+                {% endif %}
+            }
+        ))
+        {% endfor %}
+        
+        return tools
+    
+    async def execute_tool(self, name: str, arguments: Dict[str, Any]) -> Any:
+        """
+        Execute a tool by name with given arguments
+        
+        Args:
+            name: Tool name to execute
+            arguments: Tool arguments dictionary
+            
+        Returns:
+            Any: Tool execution result
+            
+        Raises:
+            ValueError: If tool is not found
+            ValidationError: If arguments are invalid
+        """
+        {% for endpoint in endpoints %}
+        {% set tool_name = endpoint.operation_id or (endpoint.method.lower() + '_' + endpoint.path.replace('/', '_').replace('{', '').replace('}', '')) %}
+        if name == "{{ tool_name }}":
+            return await self._{{ tool_name }}(arguments)
+        {% endfor %}
+        
+        raise ValueError(f"Unknown tool: {name}")
+    
+    {% for endpoint in endpoints %}
+    {% set tool_name = endpoint.operation_id or (endpoint.method.lower() + '_' + endpoint.path.replace('/', '_').replace('{', '').replace('}', '')) %}
+    @server.call_tool()
+    async def _{{ tool_name }}(self, arguments: Dict[str, Any]) -> Any:
+        """
+        {{ endpoint.summary or endpoint.description or 'Execute API operation' }}
+        
+        Args:
+            arguments: Tool arguments containing API parameters
+            
+        Returns:
+            Any: API response data
+            
+        Raises:
+            ValidationError: If arguments are invalid
+            APIError: If API request fails
+        """
+        try:
+            # Extract path parameters
+            path_params = {}
+            {% for param in endpoint.parameters %}
+            {% if param.in == 'path' %}
+            if "{{ param.name }}" in arguments:
+                path_params["{{ param.name }}"] = arguments["{{ param.name }}"]
+            {% elif param.required %}
+            else:
+                raise ValidationError("Missing required parameter: {{ param.name }}")
+            {% endif %}
+            {% endfor %}
+            
+            # Extract query parameters
+            query_params = {}
+            {% for param in endpoint.parameters %}
+            {% if param.in == 'query' %}
+            if "{{ param.name }}" in arguments:
+                query_params["{{ param.name }}"] = arguments["{{ param.name }}"]
+            {% endif %}
+            {% endfor %}
+            
+            # Build request path
+            path = "{{ endpoint.path }}"
+            for param_name, param_value in path_params.items():
+                path = path.replace(f"{{{param_name}}}", str(param_value))
+            
+            # Make API request
+            response = await self.client.make_request(
+                method="{{ endpoint.method.upper() }}",
+                endpoint=path,
+                params=query_params
+            )
+            
+            return response.data
+            
+        except Exception as e:
+            logger.error(f"Tool '{{ tool_name }}' execution failed: {str(e)}")
+            raise
+    
+    {% endfor %} 
