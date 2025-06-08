@@ -1,0 +1,77 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "{{ project_name }}"
+version = "{{ version }}"
+description = "{{ description }}"
+readme = "README.md"
+requires-python = ">={{ python_version }}"
+license = {text = "MIT"}
+authors = [
+    {name = "{{ author }}", email = "{{ author|lower|replace(' ', '.')|replace('-', '.') }}@example.com"}
+]
+keywords = ["mcp", "model-context-protocol", "{{ service_name }}"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: {{ python_version }}",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+dependencies = [
+    "mcp>=1.0.0",
+    "pydantic>=2.5.0",
+    "httpx>=0.25.0",
+    "PyYAML>=6.0.1",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.3",
+    "pytest-asyncio>=0.21.1",
+    "pytest-cov>=4.1.0",
+    "black>=23.11.0",
+    "isort>=5.12.0",
+    "mypy>=1.7.0",
+]
+
+[project.scripts]
+{{ project_name }}-server = "{{ service_name }}.server:main"
+
+[project.urls]
+Homepage = "https://github.com/your-org/{{ project_name }}"
+Repository = "https://github.com/your-org/{{ project_name }}.git"
+Issues = "https://github.com/your-org/{{ project_name }}/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["mcp_{{ service_name }}*"]
+
+[tool.black]
+line-length = 100
+target-version = ['py{{ python_version|replace('.', '') }}']
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.mypy]
+python_version = "{{ python_version }}"
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = [
+    "--verbose",
+    "--cov=src/mcp_{{ service_name }}",
+    "--cov-report=term-missing",
+    "--cov-fail-under=80"
+] 
