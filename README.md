@@ -33,6 +33,168 @@ cd mcp-cli
 pip install -e ".[dev]"
 ```
 
+## ⚡ Prerequisites
+
+### OpenAPI Generator CLI (Required for `from-openapi` command)
+
+The `mcp-cli from-openapi` command requires the OpenAPI Generator CLI tool to be installed on your system. Follow the instructions below for your operating system:
+
+#### macOS
+
+**Option 1: Using Homebrew (Recommended)**
+```bash
+# Install Homebrew if not already installed
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Install OpenAPI Generator
+brew install openapi-generator
+```
+
+**Option 2: Using npm**
+```bash
+# Install Node.js if not already installed
+brew install node
+
+# Install OpenAPI Generator CLI
+npm install -g @openapitools/openapi-generator-cli
+```
+
+#### Linux (Ubuntu/Debian)
+
+**Option 1: Using npm (Recommended)**
+```bash
+# Install Node.js and npm
+sudo apt update
+sudo apt install nodejs npm
+
+# Install OpenAPI Generator CLI
+npm install -g @openapitools/openapi-generator-cli
+```
+
+**Option 2: Using snap**
+```bash
+# Install via snap
+sudo snap install openapi-generator
+```
+
+**Option 3: Manual installation**
+```bash
+# Download the JAR file (requires Java 8+)
+# First install Java if not present
+sudo apt install openjdk-11-jre-headless
+
+# Download OpenAPI Generator
+wget https://repo1.maven.org/maven2/org/openapitools/openapi-generator-cli/7.0.1/openapi-generator-cli-7.0.1.jar -O openapi-generator-cli.jar
+
+# Make it executable and move to PATH
+sudo mv openapi-generator-cli.jar /usr/local/bin/
+echo 'alias openapi-generator-cli="java -jar /usr/local/bin/openapi-generator-cli.jar"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+#### Linux (CentOS/RHEL/Fedora)
+
+**Option 1: Using npm**
+```bash
+# Install Node.js and npm (Fedora)
+sudo dnf install nodejs npm
+
+# Install Node.js and npm (CentOS/RHEL - requires EPEL)
+sudo yum install epel-release
+sudo yum install nodejs npm
+
+# Install OpenAPI Generator CLI
+npm install -g @openapitools/openapi-generator-cli
+```
+
+**Option 2: Manual installation**
+```bash
+# Install Java if not present
+sudo dnf install java-11-openjdk  # Fedora
+# OR
+sudo yum install java-11-openjdk  # CentOS/RHEL
+
+# Download and setup OpenAPI Generator
+wget https://repo1.maven.org/maven2/org/openapitools/openapi-generator-cli/7.0.1/openapi-generator-cli-7.0.1.jar -O openapi-generator-cli.jar
+sudo mv openapi-generator-cli.jar /usr/local/bin/
+echo 'alias openapi-generator-cli="java -jar /usr/local/bin/openapi-generator-cli.jar"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+#### Windows
+
+**Option 1: Using Chocolatey (Recommended)**
+```powershell
+# Install Chocolatey if not already installed
+Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+
+# Install OpenAPI Generator
+choco install openapi-generator-cli
+```
+
+**Option 2: Using npm**
+```powershell
+# Install Node.js from https://nodejs.org/en/download/ if not already installed
+# Then install OpenAPI Generator CLI
+npm install -g @openapitools/openapi-generator-cli
+```
+
+**Option 3: Using Scoop**
+```powershell
+# Install Scoop if not already installed
+iwr -useb get.scoop.sh | iex
+
+# Install OpenAPI Generator
+scoop install openapi-generator
+```
+
+**Option 4: Manual installation**
+```powershell
+# Download Java if not present (from https://adoptium.net/)
+# Download OpenAPI Generator JAR
+Invoke-WebRequest -Uri "https://repo1.maven.org/maven2/org/openapitools/openapi-generator-cli/7.0.1/openapi-generator-cli-7.0.1.jar" -OutFile "openapi-generator-cli.jar"
+
+# Move to a permanent location (e.g., C:\tools\)
+New-Item -ItemType Directory -Force -Path C:\tools
+Move-Item openapi-generator-cli.jar C:\tools\
+
+# Add to PATH and create alias (add to PowerShell profile)
+$profile_path = $PROFILE
+if (!(Test-Path $profile_path)) { New-Item -ItemType File -Force -Path $profile_path }
+Add-Content $profile_path 'function openapi-generator-cli { java -jar C:\tools\openapi-generator-cli.jar $args }'
+```
+
+#### Docker Alternative (All Platforms)
+
+If you prefer using Docker and don't want to install OpenAPI Generator directly:
+
+```bash
+# Create an alias for the Docker version
+# Linux/macOS
+echo 'alias openapi-generator-cli="docker run --rm -v ${PWD}:/local openapitools/openapi-generator-cli"' >> ~/.bashrc
+source ~/.bashrc
+
+# Windows PowerShell
+Add-Content $PROFILE 'function openapi-generator-cli { docker run --rm -v ${PWD}:/local openapitools/openapi-generator-cli $args }'
+```
+
+#### Verify Installation
+
+After installation, verify that OpenAPI Generator is working:
+
+```bash
+openapi-generator-cli version
+```
+
+You should see output similar to:
+```
+openapi-generator-cli 7.0.1
+  commit : 40cf523
+  built  : 2023-08-11T07:47:21.337138706Z
+  source : https://github.com/openapitools/openapi-generator
+  docs   : https://openapi-generator.tech/
+```
+
 ## 🎯 Quick Start
 
 ### Initialize a Standard MCP Server
@@ -54,6 +216,8 @@ python scripts/run_server.py
 ```
 
 ### Generate from OpenAPI Specification
+**Note**: Requires OpenAPI Generator CLI (see [Prerequisites](#prerequisites))
+
 ```bash
 # From URL
 mcp-cli from-openapi --spec https://api.example.com/openapi.json
@@ -100,6 +264,8 @@ mcp-cli init \
 
 ### `mcp-cli from-openapi`
 Generate MCP server from OpenAPI specification.
+
+**Prerequisites**: Requires OpenAPI Generator CLI to be installed (see [Prerequisites](#prerequisites))
 
 **Options:**
 - `--spec, -s`: OpenAPI spec file path or URL (required)
@@ -337,6 +503,18 @@ which mcp-cli
 python -m mcp_cli.cli --help
 ```
 
+**"Command not found: openapi-generator-cli"**
+```bash
+# Check if OpenAPI Generator is installed
+openapi-generator-cli version
+
+# If not installed, follow the Prerequisites section
+# https://github.com/your-org/mcp-cli#prerequisites
+
+# For Docker users
+docker run --rm openapitools/openapi-generator-cli version
+```
+
 **"OpenAPI validation failed"**
 ```bash
 # Validate your spec first
@@ -358,6 +536,17 @@ python --version  # Should be 3.11+
 
 # Run tests with verbose output
 python -m pytest -v
+```
+
+**"Java not found" (when using manual OpenAPI Generator installation)**
+```bash
+# Install Java 8 or later
+# Ubuntu/Debian: sudo apt install openjdk-11-jre-headless
+# macOS: brew install openjdk@11
+# Windows: Download from https://adoptium.net/
+
+# Verify Java installation
+java -version
 ```
 
 ## 📄 License
