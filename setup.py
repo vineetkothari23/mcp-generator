@@ -34,7 +34,7 @@ setup(
     long_description_content_type="text/markdown",
     author="AI Development Team",
     author_email="dev@example.com",
-    url="https://github.com/your-org/mcp-cli",
+    url="https://github.com/vineetkothari23/mcp-generator",
     packages=find_packages(),
     include_package_data=True,
     package_data={

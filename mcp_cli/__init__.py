@@ -12,7 +12,6 @@ __version__ = "1.0.0"
 __author__ = "AI Development Team"
 __description__ = "CLI tool for generating MCP (Model Context Protocol) servers"
 
-from .cli import cli, MCPCLI
 from .generators import (
     ProjectStructureGenerator,
     OpenAPIGenerator,
@@ -24,8 +23,9 @@ from .validators import OpenAPIValidator, ProjectValidator
 from .utils import setup_logging, create_directory_structure
 
 __all__ = [
-    "cli",
-    "MCPCLI",
+    "__version__",
+    "__author__", 
+    "__description__",
     "ProjectStructureGenerator",
     "OpenAPIGenerator",
     "TestGenerator",
