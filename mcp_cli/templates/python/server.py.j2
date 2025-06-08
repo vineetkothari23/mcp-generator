@@ -4,8 +4,8 @@
 This module implements the main MCP server for {{ service_name }}.
 Generated automatically by mcp-cli tool.
 
-Author: {{ get('author', 'Developer') }}
-Version: {{ get('version', '1.0.0') }}
+Author: {{ author|default('Developer') }}
+Version: {{ version|default('1.0.0') }}
 """
 
 import asyncio
