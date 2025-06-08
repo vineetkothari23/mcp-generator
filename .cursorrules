@@ -39,6 +39,9 @@
 6. Ask for validation before proceeding to next function
 7. Update documentation and architecture as needed
 
+## Testing Guidelines
+1. Keep the unit tests minimum and what is needed
+
 ## Remember
 - One feature, one function, one step at a time
 - Always ask before moving forward
