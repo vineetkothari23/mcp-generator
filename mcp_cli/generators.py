@@ -23,6 +23,7 @@ import re
 from urllib.parse import urlparse
 from .openapi_client_generator import OpenAPIClientGenerator
 from .mcp_tool_mapper import MCPToolMapper
+from .config import MCPProjectConfig
 
 @dataclass
 class GenerationResult:
@@ -141,7 +142,7 @@ class BaseGenerator:
 class ProjectStructureGenerator(BaseGenerator):
     """Generator for basic MCP server project structure"""
     
-    def generate(self, project_path: Path, config) -> GenerationResult:
+    def generate(self, project_path: Path, config: MCPProjectConfig) -> GenerationResult:
         """
         Generate basic project structure and core files
         
@@ -376,7 +377,7 @@ class OpenAPIGenerator(BaseGenerator):
             potential_issues=issues
         )
     
-    def generate(self, project_path: Path, config, openapi_data: Dict[str, Any], 
+    def generate(self, project_path: Path, config: MCPProjectConfig, openapi_data: Dict[str, Any], 
                 include_examples: bool = False, max_tools: int = 50) -> GenerationResult:
         """
         Generate MCP server components from OpenAPI specification
@@ -621,7 +622,7 @@ class OpenAPIGenerator(BaseGenerator):
 class TestGenerator(BaseGenerator):
     """Generator for comprehensive test suites"""
     
-    def generate(self, project_path: Path, config) -> GenerationResult:
+    def generate(self, project_path: Path, config: MCPProjectConfig) -> GenerationResult:
         """
         Generate test framework and basic test cases
         
@@ -721,7 +722,7 @@ class TestGenerator(BaseGenerator):
 class DockerGenerator(BaseGenerator):
     """Generator for Docker deployment configuration"""
     
-    def generate(self, project_path: Path, config) -> GenerationResult:
+    def generate(self, project_path: Path, config: MCPProjectConfig) -> GenerationResult:
         """
         Generate Docker configuration for deployment
         
@@ -783,7 +784,7 @@ class DockerGenerator(BaseGenerator):
 class ConfigGenerator(BaseGenerator):
     """Generator for configuration management"""
     
-    def generate(self, project_path: Path, config) -> GenerationResult:
+    def generate(self, project_path: Path, config: MCPProjectConfig) -> GenerationResult:
         """
         Generate configuration management files
         
