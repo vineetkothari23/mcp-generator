@@ -26,7 +26,72 @@ class ValidationResult:
     errors: List[str]
     warnings: List[str]
     suggestions: List[str]
-
+@dataclass
+class GenerationResult:
+    """
+    Result of code generation operation
+    
+    Used by generators to report the outcome of code generation,
+    including files created, errors encountered, and warnings.
+    """
+    success: bool
+    files_created: List[str]
+    errors: List[str]
+    warnings: List[str]
+    
+    def __bool__(self):
+        """Allow using GenerationResult in boolean context"""
+        return self.success
+    
+    def add_files(self, files: List[str]) -> None:
+        """Add additional files to the created files list"""
+        self.files_created.extend(files)
+    
+    def add_error(self, error: str) -> None:
+        """Add an error to the result"""
+        self.errors.append(error)
+        self.success = False
+    
+    def add_warning(self, warning: str) -> None:
+        """Add a warning to the result"""
+        self.warnings.append(warning)
+    
+    def merge(self, other: 'GenerationResult') -> 'GenerationResult':
+        """
+        Merge another GenerationResult into this one
+        
+        Args:
+            other: Another GenerationResult to merge
+            
+        Returns:
+            GenerationResult: New merged result
+        """
+        return GenerationResult(
+            success=self.success and other.success,
+            files_created=self.files_created + other.files_created,
+            errors=self.errors + other.errors,
+            warnings=self.warnings + other.warnings
+        )
+    
+    @classmethod
+    def success_result(cls, files: List[str] = None, warnings: List[str] = None) -> 'GenerationResult':
+        """Create a successful generation result"""
+        return cls(
+            success=True,
+            files_created=files or [],
+            errors=[],
+            warnings=warnings or []
+        )
+    
+    @classmethod
+    def error_result(cls, errors: List[str], files: List[str] = None) -> 'GenerationResult':
+        """Create a failed generation result"""
+        return cls(
+            success=False,
+            files_created=files or [],
+            errors=errors,
+            warnings=[]
+        )
 class OpenAPIValidator:
     """Validator for OpenAPI specifications"""
     

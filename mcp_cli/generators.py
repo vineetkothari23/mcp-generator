@@ -21,8 +21,8 @@ from dataclasses import dataclass
 from jinja2 import Environment, FileSystemLoader, Template
 import re
 from urllib.parse import urlparse
-from openapi_client_generator import OpenAPIClientGenerator
-from mcp_tool_mapper import MCPToolMapper
+from .openapi_client_generator import OpenAPIClientGenerator
+from .mcp_tool_mapper import MCPToolMapper
 
 @dataclass
 class GenerationResult:

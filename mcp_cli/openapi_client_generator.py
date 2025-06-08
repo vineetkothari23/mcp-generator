@@ -119,27 +119,28 @@ class OpenAPIClientGenerator:
         """
         try:
             result = subprocess.run(
-                ['openapi-generator', 'version'],
+                ['openapi-generator-cli', 'version'],
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=10,
+                shell=True
             )
-            
             if result.returncode == 0:
-                self.logger.info(f"Found openapi-generator: {result.stdout.strip()}")
+                version = result.stdout.strip()
+                self.logger.info(f"Found openapi-generator-cli version: {version}")
                 return True
             else:
-                self.logger.warning(f"openapi-generator check failed: {result.stderr}")
+                self.logger.warning(f"openapi-generator-cli check failed: {result.stderr}")
                 return False
                 
         except FileNotFoundError:
-            self.logger.warning("openapi-generator not found in PATH")
+            self.logger.warning("openapi-generator-cli not found in PATH")
             return False
         except subprocess.TimeoutExpired:
-            self.logger.warning("openapi-generator version check timed out")
+            self.logger.warning("openapi-generator-cli version check timed out")
             return False
         except Exception as e:
-            self.logger.error(f"Error checking openapi-generator: {e}")
+            self.logger.error(f"Error checking openapi-generator-cli: {e}")
             return False
     
     def generate_python_client(
@@ -349,7 +350,7 @@ class OpenAPIClientGenerator:
     def _build_cli_args(self, spec_path: str, output_dir: Path, config: OpenAPIGeneratorConfig) -> List[str]:
         """Build command line arguments for openapi-generator"""
         args = [
-            "openapi-generator",
+            "openapi-generator-cli",
             "generate",
             "-i", spec_path,
             "-g", config.generator_type,

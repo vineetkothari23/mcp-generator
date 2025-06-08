@@ -4,6 +4,17 @@ MCP Tool Mapper - Maps OpenAPI operations to MCP tools
 Analyzes generated API client and creates MCP tool definitions
 that wrap the client methods.
 """
+from .openapi_client_generator import ClientAnalysis
+from typing import List
+from dataclasses import dataclass
+
+@dataclass
+class ToolDefinition:
+    """Definition of an MCP tool"""
+    name: str
+    description: str
+    input_schema: dict
+    output_schema: dict
 
 class MCPToolMapper:
     def __init__(self, client_analysis: ClientAnalysis):
