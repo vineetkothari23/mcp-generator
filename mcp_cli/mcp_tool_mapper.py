@@ -309,9 +309,56 @@ class MCPToolMapper:
         return text
         
     def generate_tool_implementations(self) -> str:
-        """Generate Python code for MCP tool implementations"""
-        # TODO: Implement tool implementation generation
-        pass
+        """
+        Generate Python code for MCP tool implementations
+        
+        Creates complete Python code that implements MCP tools for each
+        API operation, including:
+        - Tool registration with proper schemas
+        - Implementation methods that call the API client
+        - Error handling and response formatting
+        - Type hints and documentation
+        
+        Returns:
+            str: Complete Python code for tool implementations
+            
+        Example:
+            mapper = MCPToolMapper(client_analysis)
+            code = mapper.generate_tool_implementations()
+            
+            # Generated code includes:
+            # - Tool registration decorators
+            # - Implementation methods
+            # - Error handling
+            # - Response formatting
+        """
+        from jinja2 import Environment, FileSystemLoader
+        import os
+        
+        # Get tool definitions
+        tool_definitions = self.generate_tool_definitions()
+        
+        # Setup Jinja2 environment
+        template_dir = os.path.join(os.path.dirname(__file__), 'templates')
+        env = Environment(loader=FileSystemLoader(template_dir))
+        
+        # Load the tool implementations template
+        template = env.get_template('tool_implementations.py.j2')
+        
+        # Prepare template context
+        context = {
+            'tool_definitions': tool_definitions,
+            'client_analysis': self.client_analysis,
+            'api_classes': self.client_analysis.api_classes,
+            'operations': self.client_analysis.operations,
+            'models': self.client_analysis.models,
+            'client_package_name': self.client_analysis.client_package_name or 'generated_client'
+        }
+        
+        # Render the template
+        generated_code = template.render(**context)
+        
+        return generated_code
         
     def generate_tool_tests(self) -> str:
         """Generate tests for MCP tools"""
