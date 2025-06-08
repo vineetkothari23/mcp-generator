@@ -1,0 +1,46 @@
+# Cursor AI Coding Guidelines
+# Apply these rules for all coding assistance and code generation
+
+## Development Philosophy
+- Ask clarifying questions before starting - never assume requirements
+- Write and test ONE function at a time only
+- Break all tasks into small, manageable steps
+- Request validation after each step before proceeding
+- Use Test-Driven Development - write tests first
+- Maximum 200 lines of code per response with comprehensive test coverage
+
+## Code Quality Standards
+- Follow SOLID principles - keep code modular and reusable
+- Single responsibility - each function does one thing well
+- Write detailed comments with examples for every function
+- Use simple, clear naming conventions
+- Design everything to be configuration-driven
+- Keep each class in a separate file
+- Minimize dependencies for modularity
+
+## Decision Making Process
+- When multiple implementation options exist, outline ALL choices
+- Recommend the best option with clear reasoning
+- Always ask for human approval before making major decisions
+- Present trade-offs and implications of each choice
+
+## Documentation Requirements
+- Update main architecture document after significant changes
+- Maintain clear module and workflow summaries
+- Keep dependencies list and project config updated
+- Document all design decisions and rationale
+
+## Development Workflow
+1. Understand the requirement (ask questions if unclear)
+2. Design the solution (present options if multiple exist)
+3. Write tests first (TDD approach)
+4. Implement one function at a time
+5. Test the function thoroughly
+6. Ask for validation before proceeding to next function
+7. Update documentation and architecture as needed
+
+## Remember
+- One feature, one function, one step at a time
+- Always ask before moving forward
+- Keep it simple and modular
+- Configuration over hard-coding
