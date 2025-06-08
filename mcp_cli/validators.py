@@ -492,3 +492,21 @@ class ProjectValidator:
         docs_dir = project_path / "docs"
         if not docs_dir.exists():
             suggestions.append("Consider adding docs/ directory for detailed documentation") 
+
+class EnhancedOpenAPIValidator(OpenAPIValidator):
+    """Enhanced validator that can leverage openapi-generator validation"""
+    
+    def validate_with_generator(self, spec_path: str) -> ValidationResult:
+        """Use openapi-generator to validate spec"""
+        try:
+            result = subprocess.run([
+                "openapi-generator", "validate", "-i", spec_path
+            ], capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                return ValidationResult(True, [], [], [])
+            else:
+                errors = result.stderr.split('\n')
+                return ValidationResult(False, errors, [], [])
+        except FileNotFoundError:
+            return ValidationResult(False, ["openapi-generator not found"], [], [])

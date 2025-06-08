@@ -1,0 +1,36 @@
+"""
+{{ project_name }} - Enhanced MCP Server with OpenAPI Client
+
+Generated using openapi-generator for robust API client integration.
+"""
+
+import asyncio
+import logging
+from typing import Dict, Any, List
+from mcp.server import Server
+from mcp.types import Tool, TextContent
+
+from .config import {{ class_name }}Config
+from .generated_client.api_client import ApiClient
+from .generated_client.configuration import Configuration
+from .tools import {{ class_name }}Tools
+
+logger = logging.getLogger(__name__)
+
+class {{ class_name }}Server:
+    """Enhanced MCP server with generated API client"""
+    
+    def __init__(self, config: {{ class_name }}Config):
+        self.config = config
+        self.server = Server(name="{{ project_name }}")
+        
+        # Initialize generated API client
+        client_config = Configuration()
+        client_config.host = config.api_base_url
+        if config.api_key:
+            client_config.api_key['ApiKeyAuth'] = config.api_key
+            
+        self.api_client = ApiClient(client_config)
+        self.tools = {{ class_name }}Tools(self.server, self.api_client, config)
+        
+        self._setup_handlers()

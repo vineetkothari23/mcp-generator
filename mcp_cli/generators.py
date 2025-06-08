@@ -21,6 +21,8 @@ from dataclasses import dataclass
 from jinja2 import Environment, FileSystemLoader, Template
 import re
 from urllib.parse import urlparse
+from openapi_client_generator import OpenAPIClientGenerator
+from mcp_tool_mapper import MCPToolMapper
 
 @dataclass
 class GenerationResult:
@@ -841,3 +843,32 @@ class ConfigGenerator(BaseGenerator):
                 errors=errors,
                 warnings=[]
             ) 
+# Add new generator class
+class OpenAPIEnhancedGenerator(BaseGenerator):
+    """Enhanced OpenAPI generator using openapi-generator"""
+    
+    def __init__(self):
+        super().__init__()
+        self.client_generator = OpenAPIClientGenerator()
+        self.tool_mapper = None
+        
+    def generate(self, project_path: Path, config, openapi_data: Dict[str, Any], 
+                include_examples: bool = False, max_tools: int = 50) -> GenerationResult:
+        """Generate MCP server using openapi-generator for client code"""
+        
+        # Phase 1: Generate API client using openapi-generator
+        client_result = self._generate_api_client(project_path, config, openapi_data)
+        
+        # Phase 2: Analyze generated client  
+        client_analysis = self._analyze_generated_client(project_path, config)
+        
+        # Phase 3: Generate MCP tool mappings
+        tools_result = self._generate_mcp_tools(project_path, config, client_analysis)
+        
+        # Phase 4: Generate MCP server integration
+        server_result = self._generate_mcp_server(project_path, config, client_analysis)
+        
+        # Phase 5: Generate tests and documentation
+        docs_result = self._generate_documentation(project_path, config, client_analysis)
+        
+        return self._combine_results([client_result, tools_result, server_result, docs_result])

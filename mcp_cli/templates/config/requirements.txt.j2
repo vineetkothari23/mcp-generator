@@ -45,3 +45,16 @@ cryptography>=41.0.7
 # Optional: Message queues (uncomment if needed)
 # celery>=5.3.4
 # kombu>=5.3.4 
+
+# Add openapi-generator dependencies
+{% if generator_engine == 'enhanced' %}
+# Generated client dependencies
+urllib3>=1.26.0
+python-dateutil>=2.8.0
+pydantic>=2.0.0
+aenum>=3.1.11
+{% if async_client %}
+aiohttp>=3.8.0
+aiofiles>=22.1.0
+{% endif %}
+{% endif %}

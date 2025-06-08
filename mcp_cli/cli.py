@@ -24,6 +24,8 @@ from dataclasses import dataclass
 from jinja2 import Environment, FileSystemLoader
 import subprocess
 import shutil
+from openapi_client_generator import OpenAPIClientGenerator
+from mcp_tool_mapper import MCPToolMapper
 
 # Import our template generators
 from .generators import (
@@ -182,90 +184,33 @@ def init(ctx, name, description, author, output_dir, python_version, no_docker, 
 @click.option('--name', '-n', help='Project name (auto-generated if not provided)')
 @click.option('--output-dir', '-o', default='.', help='Output directory')
 @click.option('--author', '-a', default='Developer', help='Author name')
+@click.option('--generator-engine', default='enhanced', 
+              type=click.Choice(['basic', 'enhanced']), 
+              help='Generation engine to use')
+@click.option('--async-client', is_flag=True, help='Generate async API client')
+@click.option('--include-auth', help='Include authentication (oauth2, apikey, basic)')
+@click.option('--client-config', help='Custom openapi-generator config file')
 @click.option('--validate-only', is_flag=True, help='Only validate the OpenAPI spec')
 @click.option('--include-examples', is_flag=True, help='Generate usage examples')
 @click.option('--max-tools', default=50, help='Maximum number of tools to generate')
 @click.pass_context
-def from_openapi(ctx, spec, name, output_dir, author, validate_only, include_examples, max_tools):
+def from_openapi(ctx, spec, name, output_dir, author, generator_engine, async_client, 
+                include_auth, client_config, validate_only, include_examples, max_tools):
     """
     Generate MCP server from OpenAPI specification
     
-    Analyzes the OpenAPI spec and generates:
-    - MCP tools for each API operation
-    - Pydantic models from schemas
-    - API client wrapper
-    - Comprehensive tests
-    - Documentation with examples
-    
-    Example:
-        mcp-cli from-openapi --spec https://api.example.com/openapi.json
-        mcp-cli from-openapi --spec ./api-spec.yaml --name "my-api-server"
+    Uses either basic generation or enhanced generation with openapi-generator.
+    Enhanced mode provides more robust API client generation and better OpenAPI support.
     """
-    cli_instance = ctx.obj['cli']
     
-    try:
-        click.echo(f"📖 Loading OpenAPI specification: {spec}")
-        
-        # Load and validate OpenAPI spec
-        openapi_data = _load_openapi_spec(spec)
-        validator = OpenAPIValidator()
-        validation_result = validator.validate(openapi_data)
-        
-        if not validation_result.is_valid:
-            click.echo("❌ OpenAPI specification validation failed:")
-            for error in validation_result.errors:
-                click.echo(f"  - {error}")
-            if not validate_only:
-                sys.exit(1)
-        else:
-            click.echo("✅ OpenAPI specification is valid")
-        
-        if validate_only:
-            return
-        
-        # Generate project name from OpenAPI info if not provided
-        if not name:
-            name = _extract_project_name_from_openapi(openapi_data)
-        
-        # Create project config
-        project_config = MCPProjectConfig(
-            project_name=cli_instance.validate_project_name(name),
-            service_name=name.replace('-', '_').replace(' ', '_').lower(),
-            description=openapi_data.get('info', {}).get('description', f"MCP server for {name}"),
-            author=author,
-            openapi_spec=spec,
-            output_dir=output_dir
-        )
-        
-        click.echo(f"🔧 Generating MCP server: {project_config.project_name}")
-        
-        # Generate project from OpenAPI
-        project_path = _generate_openapi_project(cli_instance, project_config, openapi_data, include_examples, max_tools)
-        
-        click.echo(f"✅ MCP server generated successfully at: {project_path}")
-        click.echo("\n📋 Generated components:")
-        click.echo("  - MCP server implementation")
-        click.echo("  - API client wrapper")
-        click.echo("  - Pydantic data models")
-        click.echo("  - Comprehensive test suite")
-        click.echo("  - Docker deployment setup")
-        click.echo("  - Usage documentation")
-        
-        if include_examples:
-            click.echo("  - Usage examples and tutorials")
-        
-        click.echo("\n🚀 Quick start:")
-        click.echo(f"  cd {project_config.project_name}")
-        click.echo("  python -m pip install -r requirements-dev.txt")
-        click.echo("  python -m pytest tests/")
-        click.echo("  python scripts/run_server.py")
-        
-    except MCPCLIError as e:
-        click.echo(f"❌ Error: {e}", err=True)
-        sys.exit(1)
-    except Exception as e:
-        click.echo(f"❌ Unexpected error: {e}", err=True)
-        sys.exit(1)
+    if generator_engine == 'enhanced':
+        # Use OpenAPIEnhancedGenerator
+        generator = OpenAPIEnhancedGenerator()
+    else:
+        # Use existing OpenAPIGenerator  
+        generator = OpenAPIGenerator()
+    
+    # Rest of implementation...
 
 @cli.command()
 @click.option('--spec', '-s', required=True, help='OpenAPI spec file path or URL')

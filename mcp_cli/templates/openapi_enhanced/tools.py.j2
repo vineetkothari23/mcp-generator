@@ -1,0 +1,42 @@
+"""
+{{ project_name }} - MCP Tools with Generated API Client
+
+Maps OpenAPI operations to MCP tools using generated client code.
+"""
+
+import logging
+from typing import Dict, Any, List
+from mcp.server import Server
+from mcp.types import Tool, TextContent
+
+# Import generated API classes
+{% for api_class in api_classes %}
+from .generated_client.api.{{ api_class.module }} import {{ api_class.name }}
+{% endfor %}
+
+logger = logging.getLogger(__name__)
+
+class {{ class_name }}Tools:
+    """MCP tools using generated API client"""
+    
+    def __init__(self, server: Server, api_client, config):
+        self.server = server
+        self.api_client = api_client
+        self.config = config
+        
+        # Initialize API instances
+        {% for api_class in api_classes %}
+        self.{{ api_class.name|lower }} = {{ api_class.name }}(api_client)
+        {% endfor %}
+        
+    async def list_available_tools(self) -> List[Tool]:
+        """List all available tools from OpenAPI operations"""
+        return [
+            {% for operation in operations %}
+            Tool(
+                name="{{ operation.tool_name }}",
+                description="{{ operation.summary or operation.description }}",
+                inputSchema={{ operation.input_schema|tojson }}
+            ),
+            {% endfor %}
+        ]
