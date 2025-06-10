@@ -5,6 +5,8 @@ Tests the ConfigGenerator's ability to generate configuration files correctly
 in the right locations using appropriate templates.
 """
 import pytest
+import tempfile
+import yaml
 from unittest.mock import Mock, patch, call
 from pathlib import Path
 from mcp_cli.generators import ConfigGenerator, GenerationResult
@@ -383,3 +385,263 @@ class TestConfigGenerator:
             
             for i, expected_path in enumerate(expected_paths):
                 assert write_calls[i][0][0] == expected_path
+
+
+class TestConfigGeneratorIntegration:
+    """Integration tests that actually use real templates"""
+    
+    @pytest.fixture
+    def real_config(self):
+        """Create a real MCPProjectConfig for integration testing"""
+        return MCPProjectConfig(
+            project_name="test-config-server",
+            service_name="config_service",
+            description="Test Config MCP server",
+            author="Test Author",
+            version="2.0.0"
+        )
+    
+    def test_template_files_exist_and_load(self):
+        """Test that all required template files exist and can be loaded"""
+        generator = ConfigGenerator()
+        
+        # Test that all expected templates exist and can be loaded
+        required_templates = [
+            "config/server_config.yaml.j2",
+            "config/logging.yaml.j2",
+            "scripts/run_server.py.j2"
+        ]
+        
+        test_context = {
+            "service_name": "config_service",
+            "project_name": "test-config-server",
+            "version": "2.0.0"
+        }
+        
+        for template_name in required_templates:
+            try:
+                # This should not raise an exception if template exists
+                content = generator.render_template(template_name, test_context)
+                assert content is not None
+                assert len(content) > 0
+                assert isinstance(content, str)
+            except Exception as e:
+                pytest.fail(f"Template {template_name} failed to load or render: {str(e)}")
+    
+    def test_real_generation_with_actual_templates(self, real_config):
+        """Test actual generation using real templates (no mocking)"""
+        generator = ConfigGenerator()
+        
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_path = Path(temp_dir) / "test-project"
+            
+            # This should work with real templates
+            result = generator.generate(project_path, real_config)
+            
+            # Verify generation succeeded
+            assert result.success is True
+            assert len(result.errors) == 0
+            assert len(result.files_created) == 3
+            
+            # Verify all expected files were created
+            expected_files = [
+                project_path / "config" / "server_config.yaml",
+                project_path / "config" / "logging.yaml", 
+                project_path / "scripts" / "run_server.py"
+            ]
+            
+            for expected_file in expected_files:
+                assert expected_file.exists(), f"Expected file {expected_file} was not created"
+                assert expected_file.stat().st_size > 0, f"File {expected_file} is empty"
+    
+    def test_generated_yaml_files_are_valid(self, real_config):
+        """Test that generated YAML files have valid syntax"""
+        generator = ConfigGenerator()
+        
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_path = Path(temp_dir) / "test-project"
+            
+            result = generator.generate(project_path, real_config)
+            assert result.success is True
+            
+            # Check YAML files for valid syntax
+            yaml_files = [
+                project_path / "config" / "server_config.yaml",
+                project_path / "config" / "logging.yaml"
+            ]
+            
+            for yaml_file in yaml_files:
+                try:
+                    content = yaml_file.read_text()
+                    # This will raise yaml.YAMLError if the file has invalid YAML syntax
+                    parsed_yaml = yaml.safe_load(content)
+                    assert parsed_yaml is not None
+                    assert isinstance(parsed_yaml, dict)
+                except yaml.YAMLError as e:
+                    pytest.fail(f"Generated file {yaml_file} has invalid YAML syntax: {str(e)}")
+    
+    def test_generated_python_script_is_valid(self, real_config):
+        """Test that generated Python script has valid syntax"""
+        import ast
+        
+        generator = ConfigGenerator()
+        
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_path = Path(temp_dir) / "test-project"
+            
+            result = generator.generate(project_path, real_config)
+            assert result.success is True
+            
+            # Check Python script for valid syntax
+            script_file = project_path / "scripts" / "run_server.py"
+            try:
+                content = script_file.read_text()
+                # This will raise SyntaxError if the file has invalid Python syntax
+                ast.parse(content)
+            except SyntaxError as e:
+                pytest.fail(f"Generated file {script_file} has invalid Python syntax: {str(e)}")
+    
+    def test_template_content_substitution(self, real_config):
+        """Test that template variables are properly substituted"""
+        generator = ConfigGenerator()
+        
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_path = Path(temp_dir) / "test-project"
+            
+            result = generator.generate(project_path, real_config)
+            assert result.success is True
+            
+            # Check that server_config.yaml contains the correct substitutions
+            server_config_path = project_path / "config" / "server_config.yaml"
+            server_config_content = server_config_path.read_text()
+            assert "test-config-server" in server_config_content
+            assert "config_service" in server_config_content
+            assert "2.0.0" in server_config_content
+            
+            # Check that logging.yaml contains project name
+            logging_config_path = project_path / "config" / "logging.yaml"
+            logging_config_content = logging_config_path.read_text()
+            assert "test-config-server" in logging_config_content
+            
+            # Check that run_server.py contains service references
+            script_path = project_path / "scripts" / "run_server.py"
+            script_content = script_path.read_text()
+            assert "config_service" in script_content
+            assert "test-config-server" in script_content
+    
+    def test_template_syntax_validity(self):
+        """Test that templates have valid syntax and render without errors"""
+        generator = ConfigGenerator()
+        
+        # Test various context combinations
+        test_contexts = [
+            {
+                "service_name": "simple_service",
+                "project_name": "simple-project",
+                "version": "1.0.0"
+            },
+            {
+                "service_name": "complex_service_name",
+                "project_name": "complex-project-name-with-hyphens",
+                "version": "0.1.0-alpha"
+            },
+            {
+                "service_name": "api_service",
+                "project_name": "api-mcp-server",
+                "version": "3.2.1"
+            }
+        ]
+        
+        templates = [
+            "config/server_config.yaml.j2",
+            "config/logging.yaml.j2",
+            "scripts/run_server.py.j2"
+        ]
+        
+        for context in test_contexts:
+            for template_name in templates:
+                try:
+                    content = generator.render_template(template_name, context)
+                    # Basic validation that content was rendered
+                    assert content is not None
+                    assert len(content.strip()) > 0
+                    # Check that template variables were substituted
+                    assert "{{" not in content, f"Template {template_name} has unsubstituted variables"
+                    assert "}}" not in content, f"Template {template_name} has unsubstituted variables"
+                except Exception as e:
+                    pytest.fail(f"Template {template_name} failed with context {context}: {str(e)}")
+    
+    def test_yaml_structure_validity(self, real_config):
+        """Test that generated YAML files have expected structure"""
+        generator = ConfigGenerator()
+        
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_path = Path(temp_dir) / "test-project"
+            
+            result = generator.generate(project_path, real_config)
+            assert result.success is True
+            
+            # Check server config structure
+            server_config_path = project_path / "config" / "server_config.yaml"
+            with open(server_config_path, 'r') as f:
+                server_config = yaml.safe_load(f)
+            
+            # Verify expected top-level keys exist in server config
+            expected_server_keys = ['server', 'tools', 'resources', 'logging']
+            for key in expected_server_keys:
+                assert key in server_config, f"Expected key '{key}' not found in server_config.yaml"
+            
+            # Check logging config structure
+            logging_config_path = project_path / "config" / "logging.yaml"
+            with open(logging_config_path, 'r') as f:
+                logging_config = yaml.safe_load(f)
+            
+            # Verify expected top-level keys exist in logging config
+            expected_logging_keys = ['version', 'formatters', 'handlers', 'loggers']
+            for key in expected_logging_keys:
+                assert key in logging_config, f"Expected key '{key}' not found in logging.yaml"
+    
+    def test_missing_template_handling(self):
+        """Test behavior when a template is missing"""
+        generator = ConfigGenerator()
+        
+        # Mock render_template to simulate missing template
+        with patch.object(generator, 'render_template') as mock_render:
+            mock_render.side_effect = FileNotFoundError("Template not found")
+            
+            # This should fail gracefully
+            with tempfile.TemporaryDirectory() as temp_dir:
+                project_path = Path(temp_dir) / "test-project"
+                config = MCPProjectConfig(
+                    project_name="test",
+                    service_name="test",
+                    description="test",
+                    author="test",
+                    version="1.0.0"
+                )
+                
+                result = generator.generate(project_path, config)
+                
+                assert result.success is False
+                assert len(result.errors) > 0
+                assert "Failed to generate configuration" in result.errors[0]
+    
+    def test_directory_creation(self, real_config):
+        """Test that directories are created properly when they don't exist"""
+        generator = ConfigGenerator()
+        
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_path = Path(temp_dir) / "new-project"
+            # Project path doesn't exist yet
+            assert not project_path.exists()
+            
+            result = generator.generate(project_path, real_config)
+            assert result.success is True
+            
+            # Verify directories were created
+            assert (project_path / "config").exists()
+            assert (project_path / "scripts").exists()
+            
+            # Verify they're actually directories
+            assert (project_path / "config").is_dir()
+            assert (project_path / "scripts").is_dir()
