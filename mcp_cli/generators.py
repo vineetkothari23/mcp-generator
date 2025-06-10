@@ -843,8 +843,8 @@ class ConfigGenerator(BaseGenerator):
                 files_created=files_created,
                 errors=errors,
                 warnings=[]
-            ) 
-# Add new generator class
+            )
+
 class OpenAPIEnhancedGenerator(BaseGenerator):
     """Enhanced OpenAPI generator using openapi-generator
     class OpenAPIEnhancedGenerator:
@@ -893,3 +893,247 @@ class OpenAPIEnhancedGenerator(BaseGenerator):
         docs_result = self._generate_documentation(project_path, config, client_analysis)
         
         return self._combine_results([client_result, tools_result, server_result, docs_result])
+
+class MCPGenerator(BaseGenerator):
+    """
+    Generator for complete MCP server projects
+    
+    Orchestrates the generation of a standard MCP project by coordinating
+    multiple specialized generators. Creates a production-ready MCP server
+    with proper project structure, configuration, tests, and optional Docker setup.
+    """
+    
+    def __init__(self):
+        """Initialize MCP generator with component generators"""
+        super().__init__()
+        self.structure_generator = ProjectStructureGenerator()
+        self.test_generator = TestGenerator()
+        self.config_generator = ConfigGenerator()
+        self.docker_generator = DockerGenerator()
+    
+    def generate(self, project_path: Path, config: MCPProjectConfig) -> GenerationResult:
+        """
+        Generate complete MCP server project
+        
+        Creates a comprehensive MCP server project including:
+        - Project structure and core Python files
+        - Configuration management
+        - Test framework and basic test cases
+        - Docker deployment setup (optional)
+        
+        Args:
+            project_path: Target project directory
+            config: Project configuration containing all generation settings
+            
+        Returns:
+            GenerationResult: Aggregated result from all component generators
+            
+        Example:
+            generator = MCPGenerator()
+            config = MCPProjectConfig(
+                project_name="my-mcp-server",
+                service_name="my_service",
+                description="My MCP server",
+                author="Developer"
+            )
+            result = generator.generate(Path("./output"), config)
+        """
+        all_files_created = []
+        all_errors = []
+        all_warnings = []
+        
+        try:
+            # Phase 1: Generate project structure and core files
+            structure_result = self._generate_project_structure(project_path, config)
+            all_files_created.extend(structure_result.files_created)
+            all_errors.extend(structure_result.errors)
+            all_warnings.extend(structure_result.warnings)
+            
+            if not structure_result.success:
+                all_warnings.append("Project structure generation failed, continuing with other components")
+            
+            # Phase 2: Generate configuration files
+            config_result = self._generate_configuration(project_path, config)
+            all_files_created.extend(config_result.files_created)
+            all_errors.extend(config_result.errors)
+            all_warnings.extend(config_result.warnings)
+            
+            if not config_result.success:
+                all_warnings.append("Configuration generation failed, continuing with other components")
+            
+            # Phase 3: Generate test framework
+            test_result = self._generate_tests(project_path, config)
+            all_files_created.extend(test_result.files_created)
+            all_errors.extend(test_result.errors)
+            all_warnings.extend(test_result.warnings)
+            
+            if not test_result.success:
+                all_warnings.append("Test generation failed, continuing with other components")
+            
+            # Phase 4: Generate Docker setup (optional)
+            docker_result = None
+            if config.include_docker:
+                docker_result = self._generate_docker(project_path, config)
+                all_files_created.extend(docker_result.files_created)
+                all_errors.extend(docker_result.errors)
+                all_warnings.extend(docker_result.warnings)
+                
+                if not docker_result.success:
+                    all_warnings.append("Docker generation failed")
+            
+            # Phase 5: Generate project summary
+            self._generate_project_summary(project_path, config, all_files_created)
+            
+            # Determine overall success
+            critical_failures = [
+                not structure_result.success,
+                not config_result.success,
+                not test_result.success
+            ]
+            
+            overall_success = not any(critical_failures)
+            
+            if not overall_success:
+                all_errors.append("One or more critical components failed to generate")
+            
+            return GenerationResult(
+                success=overall_success,
+                files_created=all_files_created,
+                errors=all_errors,
+                warnings=all_warnings
+            )
+            
+        except Exception as e:
+            all_errors.append(f"Failed to generate MCP project: {str(e)}")
+            return GenerationResult(
+                success=False,
+                files_created=all_files_created,
+                errors=all_errors,
+                warnings=all_warnings
+            )
+    
+    def _generate_project_structure(self, project_path: Path, config: MCPProjectConfig) -> GenerationResult:
+        """Generate project structure using ProjectStructureGenerator"""
+        try:
+            return self.structure_generator.generate(project_path, config)
+        except Exception as e:
+            return GenerationResult(
+                success=False,
+                files_created=[],
+                errors=[f"Project structure generation failed: {str(e)}"],
+                warnings=[]
+            )
+    
+    def _generate_configuration(self, project_path: Path, config: MCPProjectConfig) -> GenerationResult:
+        """Generate configuration files using ConfigGenerator"""
+        try:
+            return self.config_generator.generate(project_path, config)
+        except Exception as e:
+            return GenerationResult(
+                success=False,
+                files_created=[],
+                errors=[f"Configuration generation failed: {str(e)}"],
+                warnings=[]
+            )
+    
+    def _generate_tests(self, project_path: Path, config: MCPProjectConfig) -> GenerationResult:
+        """Generate test framework using TestGenerator"""
+        try:
+            return self.test_generator.generate(project_path, config)
+        except Exception as e:
+            return GenerationResult(
+                success=False,
+                files_created=[],
+                errors=[f"Test generation failed: {str(e)}"],
+                warnings=[]
+            )
+    
+    def _generate_docker(self, project_path: Path, config: MCPProjectConfig) -> GenerationResult:
+        """Generate Docker configuration using DockerGenerator"""
+        try:
+            return self.docker_generator.generate(project_path, config)
+        except Exception as e:
+            return GenerationResult(
+                success=False,
+                files_created=[],
+                errors=[f"Docker generation failed: {str(e)}"],
+                warnings=[]
+            )
+    
+    def _generate_project_summary(self, project_path: Path, config: MCPProjectConfig, files_created: List[str]) -> None:
+        """Generate a project summary file with generation details"""
+        try:
+            summary_content = self.render_template("project/PROJECT_SUMMARY.md.j2", {
+                "project_name": config.project_name,
+                "service_name": config.service_name,
+                "description": config.description,
+                "author": config.author,
+                "version": config.version,
+                "python_version": config.python_version,
+                "test_framework": config.test_framework,
+                "include_docker": config.include_docker,
+                "include_ci": config.include_ci,
+                "files_created": files_created,
+                "file_count": len(files_created)
+            })
+            
+            summary_path = project_path / "PROJECT_SUMMARY.md"
+            self.write_file(summary_path, summary_content)
+            files_created.append(str(summary_path))
+            
+        except Exception as e:
+            # Don't fail the entire generation for summary file issues
+            pass
+    
+    def get_generation_order(self) -> List[str]:
+        """
+        Get the order in which components are generated
+        
+        Returns:
+            List[str]: Ordered list of generation phases
+        """
+        return [
+            "Project Structure",
+            "Configuration Files", 
+            "Test Framework",
+            "Docker Setup (optional)",
+            "Project Summary"
+        ]
+    
+    def validate_config(self, config: MCPProjectConfig) -> List[str]:
+        """
+        Validate project configuration before generation
+        
+        Args:
+            config: Project configuration to validate
+            
+        Returns:
+            List[str]: List of validation errors (empty if valid)
+        """
+        errors = []
+        
+        # Required fields validation
+        if not config.project_name or not config.project_name.strip():
+            errors.append("Project name is required")
+        
+        if not config.service_name or not config.service_name.strip():
+            errors.append("Service name is required")
+        
+        if not config.description or not config.description.strip():
+            errors.append("Project description is required")
+        
+        if not config.author or not config.author.strip():
+            errors.append("Author is required")
+        
+        # Format validation
+        if config.project_name and not re.match(r'^[a-zA-Z0-9\-_]+$', config.project_name):
+            errors.append("Project name can only contain letters, numbers, hyphens, and underscores")
+        
+        if config.service_name and not re.match(r'^[a-zA-Z][a-zA-Z0-9_]*$', config.service_name):
+            errors.append("Service name must be a valid Python identifier")
+        
+        # Python version validation
+        if config.python_version and not re.match(r'^\d+\.\d+$', config.python_version):
+            errors.append("Python version must be in format 'X.Y' (e.g., '3.11')")
+        
+        return errors
