@@ -677,12 +677,23 @@ class TestGenerator(BaseGenerator):
         
         # Generate pytest.ini
         pytest_ini_content = self.render_template("tests/pytest.ini.j2", {
-            "project_name": config.project_name
+            "project_name": config.project_name,
+            "service_name": config.service_name
         })
         
         pytest_ini_path = project_path / "pytest.ini"
         self.write_file(pytest_ini_path, pytest_ini_content)
         files_created.append(str(pytest_ini_path))
+        
+        # Generate .coveragerc
+        coveragerc_content = self.render_template("tests/.coveragerc.j2", {
+            "project_name": config.project_name,
+            "service_name": config.service_name
+        })
+        
+        coveragerc_path = project_path / ".coveragerc"
+        self.write_file(coveragerc_path, coveragerc_content)
+        files_created.append(str(coveragerc_path))
     
     def _generate_test_fixtures(self, project_path: Path, config, files_created: List[str]):
         """Generate test fixtures and mock data"""
