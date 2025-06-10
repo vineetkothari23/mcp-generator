@@ -308,17 +308,17 @@ class MCPToolMapper:
         
         return text        
         def generate_tool_implementation_mapping(self) -> Dict[str, Any]:
-        """Generate mapping data for tool implementations"""
-        return {
-            'tool_definitions': self.generate_tool_definitions(),
-            'api_classes': self.client_analysis.api_classes,
-            'operations': self.client_analysis.operations,
-            'template_context': {
-                'project_name': self.project_name,
-                'class_name': self.class_name,
-                # ... other context data
+            """Generate mapping data for tool implementations"""
+            return {
+                'tool_definitions': self.generate_tool_definitions(),
+                'api_classes': self.client_analysis.api_classes,
+                'operations': self.client_analysis.operations,
+                'template_context': {
+                    'project_name': self.project_name,
+                    'class_name': self.class_name,
+                    # ... other context data
+                }
             }
-        }
     
     def generate_tool_test_mapping(self) -> Dict[str, Any]:
         """Generate mapping data for tool tests"""
