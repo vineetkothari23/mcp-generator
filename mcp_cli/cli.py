@@ -370,29 +370,28 @@ def _extract_project_name_from_openapi(openapi_data: Dict[str, Any]) -> str:
 
 def _generate_standard_project(cli_instance: MCPCLI, config: MCPProjectConfig) -> str:
     """
-    Generate standard MCP server project structure
+    Generate standard MCP server project structure using MCPGenerator
     
     Args:
-        cli_instance: CLI instance with generators
+        cli_instance: CLI instance with generators (unused but kept for compatibility)
         config: Project configuration
         
     Returns:
         str: Path to generated project
     """
+    from .generators import MCPGenerator
+    
     project_path = Path(config.output_dir) / config.project_name
     
-    # Create directory structure
-    cli_instance.generators["structure"].generate(project_path, config)
+    # Use MCPGenerator for comprehensive project generation
+    mcp_generator = MCPGenerator()
+    result = mcp_generator.generate(project_path, config)
     
-    # Generate configuration files
-    cli_instance.generators["config"].generate(project_path, config)
-    
-    # Generate test framework
-    cli_instance.generators["tests"].generate(project_path, config)
-    
-    # Generate Docker setup if requested
-    if config.include_docker:
-        cli_instance.generators["docker"].generate(project_path, config)
+    if not result.success:
+        error_msg = "Project generation failed:\n" + "\n".join(result.errors)
+        if result.warnings:
+            error_msg += "\nWarnings:\n" + "\n".join(result.warnings)
+        raise MCPCLIError(error_msg)
     
     return str(project_path)
 
