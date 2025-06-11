@@ -415,13 +415,13 @@ def _generate_openapi_project(
     Returns:
         str: Path to generated project
     """
+    from .generators import MCPGenerator
+    
     project_path = Path(config.output_dir) / config.project_name
     
-    # Generate standard structure first
-    project_path_str = _generate_standard_project(cli_instance, config)
-    
-    # Generate OpenAPI-specific components
-    cli_instance.generators["openapi"].generate(
+    # Use MCPGenerator with OpenAPI support for comprehensive project generation
+    mcp_generator = MCPGenerator()
+    result = mcp_generator.generate_from_openapi(
         project_path, 
         config, 
         openapi_data,
@@ -429,7 +429,13 @@ def _generate_openapi_project(
         max_tools=max_tools
     )
     
-    return project_path_str
+    if not result.success:
+        error_msg = "OpenAPI project generation failed:\n" + "\n".join(result.errors)
+        if result.warnings:
+            error_msg += "\nWarnings:\n" + "\n".join(result.warnings)
+        raise MCPCLIError(error_msg)
+    
+    return str(project_path)
 
 if __name__ == '__main__':
     cli()

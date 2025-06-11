@@ -1,0 +1,152 @@
+# {{ project_name }} Usage Examples
+
+This document provides practical examples of how to use the {{ project_name }} MCP server.
+
+## Getting Started
+
+1. **Install the MCP server**:
+   ```bash
+   pip install -e .
+   ```
+
+2. **Configure your MCP client** to connect to this server.
+
+3. **Start using the available tools** as shown in the examples below.
+
+## Available Tools
+
+{% for operation in operations -%}
+### {{ operation.name }}
+
+{% if operation.summary -%}
+**Purpose**: {{ operation.summary }}
+{% endif -%}
+
+{% if operation.description -%}
+**Description**: {{ operation.description }}
+{% endif -%}
+
+**Method**: {{ operation.method }} {{ operation.path }}
+
+{% if operation.parameters -%}
+**Example Usage**:
+```json
+{
+  "tool": "{{ operation.name }}",
+  "arguments": {
+{% for param in operation.parameters -%}
+    "{{ param.name }}": "example_value"{% if not loop.last %},{% endif %}
+{% endfor %}
+  }
+}
+```
+
+**Parameters**:
+{% for param in operation.parameters -%}
+- `{{ param.name }}` ({{ param.type }}): {{ param.description or 'No description provided' }}
+{% endfor %}
+{% else -%}
+**Example Usage**:
+```json
+{
+  "tool": "{{ operation.name }}",
+  "arguments": {}
+}
+```
+
+This operation requires no parameters.
+{% endif -%}
+
+{% if operation.response_type -%}
+**Expected Response Type**: {{ operation.response_type }}
+{% endif -%}
+
+---
+
+{% endfor %}
+
+## Common Patterns
+
+### Error Handling
+
+All tools return standardized error responses when something goes wrong:
+
+```json
+{
+  "error": {
+    "code": "API_ERROR",
+    "message": "Detailed error description",
+    "details": {
+      "status_code": 400,
+      "api_response": "Original API error message"
+    }
+  }
+}
+```
+
+### Authentication
+
+{% if client_analysis.auth_schemes -%}
+This API requires authentication. The server handles the following authentication methods:
+{% for auth_scheme in client_analysis.auth_schemes -%}
+- {{ auth_scheme }}
+{% endfor %}
+
+Configure authentication by setting the appropriate environment variables or configuration options.
+{% else -%}
+This API does not require authentication.
+{% endif %}
+
+### Rate Limiting
+
+The server includes built-in rate limiting and retry logic to handle API rate limits gracefully. If you encounter rate limiting errors, the server will automatically retry with exponential backoff.
+
+## Integration Examples
+
+### Using with Claude Desktop
+
+Add this server to your Claude Desktop configuration:
+
+```json
+{
+  "mcpServers": {
+    "{{ service_name }}": {
+      "command": "python",
+      "args": ["-m", "mcp_{{ service_name }}.server"],
+      "env": {
+        "API_KEY": "your-api-key-here"
+      }
+    }
+  }
+}
+```
+
+### Using with Other MCP Clients
+
+The server follows the standard MCP protocol and can be used with any MCP-compatible client. Refer to your client's documentation for specific integration instructions.
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Authentication Errors**: Ensure your API credentials are properly configured
+2. **Network Errors**: Check your internet connection and API endpoint availability
+3. **Parameter Validation**: Verify that all required parameters are provided with correct types
+4. **Rate Limiting**: The server handles rate limits automatically, but you may need to wait during high usage periods
+
+### Debug Mode
+
+Enable debug logging by setting the `DEBUG` environment variable:
+
+```bash
+DEBUG=1 python -m mcp_{{ service_name }}.server
+```
+
+This will provide detailed logging of all API calls and responses.
+
+## Support
+
+For issues and questions:
+- Check the API documentation for parameter requirements
+- Review the server logs for detailed error information
+- Ensure your API credentials have the necessary permissions 

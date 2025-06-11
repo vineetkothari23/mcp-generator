@@ -15,13 +15,14 @@ production-ready code with proper error handling and documentation.
 import os
 import json
 import yaml
+import logging
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Set
 from dataclasses import dataclass
 from jinja2 import Environment, FileSystemLoader, Template
 import re
 from urllib.parse import urlparse
-from .openapi_client_generator import OpenAPIClientGenerator
+from .openapi_client_generator import OpenAPIClientGenerator, ClientAnalysis
 from .mcp_tool_mapper import MCPToolMapper
 from .config import MCPProjectConfig
 
@@ -858,52 +859,316 @@ class ConfigGenerator(BaseGenerator):
 
 class OpenAPIEnhancedGenerator(BaseGenerator):
     """Enhanced OpenAPI generator using openapi-generator
-    class OpenAPIEnhancedGenerator:
-    def _generate_mcp_tools(self, project_path, config, client_analysis):
-        # 1. Create tool mapper
-        tool_mapper = MCPToolMapper(client_analysis)
-        
-        # 2. Get mapping metadata (not code!)
-        tool_mappings = tool_mapper.generate_tool_implementation_mapping()
-        test_mappings = tool_mapper.generate_tool_test_mapping()
-        
-        # 3. Use TestGenerator with mappings
-        test_generator = TestGenerator()
-        test_generator.generate_tool_tests(
-            project_path, 
-            config, 
-            test_mappings  # Pass mapping data
-        )
-        
-        # 4. Generate tool implementations using mappings
-        self._generate_tools_from_mappings(project_path, config, tool_mappings)
+    
+    This generator creates MCP servers from OpenAPI specifications by:
+    1. Using openapi-generator to create a Python API client
+    2. Analyzing the generated client to extract operations and models
+    3. Mapping API operations to MCP tools using MCPToolMapper
+    4. Generating MCP server code that integrates with the API client
+    5. Creating comprehensive tests and documentation
     """
     
     def __init__(self):
         super().__init__()
         self.client_generator = OpenAPIClientGenerator()
         self.tool_mapper = None
+        self.logger = logging.getLogger(__name__)
         
-    def generate(self, project_path: Path, config, openapi_data: Dict[str, Any], 
+    def generate(self, project_path: Path, config: MCPProjectConfig, openapi_data: Dict[str, Any], 
                 include_examples: bool = False, max_tools: int = 50) -> GenerationResult:
-        """Generate MCP server using openapi-generator for client code"""
+        """Generate MCP server using openapi-generator for client code
         
-        # Phase 1: Generate API client using openapi-generator
-        client_result = self._generate_api_client(project_path, config, openapi_data)
+        Args:
+            project_path: Target project directory
+            config: Project configuration
+            openapi_data: Parsed OpenAPI specification
+            include_examples: Whether to generate usage examples
+            max_tools: Maximum number of tools to generate
+            
+        Returns:
+            GenerationResult: Combined result from all generation phases
+        """
+        all_files_created = []
+        all_errors = []
+        all_warnings = []
         
-        # Phase 2: Analyze generated client  
-        client_analysis = self._analyze_generated_client(project_path, config)
+        try:
+            # Phase 1: Generate API client using openapi-generator
+            client_result = self._generate_api_client(project_path, config, openapi_data)
+            all_files_created.extend(client_result.files_created)
+            all_errors.extend(client_result.errors)
+            all_warnings.extend(client_result.warnings)
+            
+            if not client_result.success:
+                return GenerationResult(
+                    success=False,
+                    files_created=all_files_created,
+                    errors=all_errors + ["API client generation failed - cannot proceed"],
+                    warnings=all_warnings
+                )
+            
+            # Phase 2: Analyze generated client  
+            client_analysis = self._analyze_generated_client(project_path, config)
+            if not client_analysis:
+                return GenerationResult(
+                    success=False,
+                    files_created=all_files_created,
+                    errors=all_errors + ["Failed to analyze generated client"],
+                    warnings=all_warnings
+                )
+            
+            # Phase 3: Generate MCP tool mappings
+            tools_result = self._generate_mcp_tools(project_path, config, client_analysis, max_tools)
+            all_files_created.extend(tools_result.files_created)
+            all_errors.extend(tools_result.errors)
+            all_warnings.extend(tools_result.warnings)
+            
+            # Phase 4: Generate MCP server integration
+            server_result = self._generate_mcp_server(project_path, config, client_analysis)
+            all_files_created.extend(server_result.files_created)
+            all_errors.extend(server_result.errors)
+            all_warnings.extend(server_result.warnings)
+            
+            # Phase 5: Generate tests and documentation
+            docs_result = self._generate_documentation(project_path, config, client_analysis, include_examples)
+            all_files_created.extend(docs_result.files_created)
+            all_errors.extend(docs_result.errors)
+            all_warnings.extend(docs_result.warnings)
+            
+            # Determine overall success
+            overall_success = client_result.success and tools_result.success and server_result.success
+            
+            return GenerationResult(
+                success=overall_success,
+                files_created=all_files_created,
+                errors=all_errors,
+                warnings=all_warnings
+            )
+            
+        except Exception as e:
+            all_errors.append(f"OpenAPI enhanced generation failed: {str(e)}")
+            return GenerationResult(
+                success=False,
+                files_created=all_files_created,
+                errors=all_errors,
+                warnings=all_warnings
+            )
+    
+    def _generate_api_client(self, project_path: Path, config: MCPProjectConfig, openapi_data: Dict[str, Any]) -> GenerationResult:
+        """Generate API client using openapi-generator"""
+        try:
+            # Prepare client output directory
+            client_dir = config.get_client_package_path()
+            
+            # Write OpenAPI spec to temporary file if needed
+            if config.openapi_spec:
+                spec_path = config.openapi_spec
+            else:
+                # Write openapi_data to temporary file
+                import tempfile
+                import json
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                    json.dump(openapi_data, f, indent=2)
+                    spec_path = f.name
+            
+            # Generate client using openapi-generator
+            result = self.client_generator.generate_python_client(
+                spec_path=spec_path,
+                output_dir=client_dir,
+                config=config.openapi_config
+            )
+            
+            return result
+            
+        except Exception as e:
+            return GenerationResult(
+                success=False,
+                files_created=[],
+                errors=[f"API client generation failed: {str(e)}"],
+                warnings=[]
+            )
+    
+    def _analyze_generated_client(self, project_path: Path, config: MCPProjectConfig) -> Optional[ClientAnalysis]:
+        """Analyze generated client to extract operations and models"""
+        try:
+            client_dir = config.get_client_package_path()
+            
+            # Parse the generated client
+            client_analysis = self.client_generator.parse_generated_client(client_dir)
+            
+            # Validate the client
+            validation_result = self.client_generator.validate_generated_client(client_dir)
+            if not validation_result.is_valid:
+                self.logger.warning(f"Generated client validation issues: {validation_result.errors}")
+            
+            return client_analysis
+            
+        except Exception as e:
+            self.logger.error(f"Failed to analyze generated client: {e}")
+            return None
+    
+    def _generate_mcp_tools(self, project_path: Path, config: MCPProjectConfig, 
+                           client_analysis: ClientAnalysis, max_tools: int) -> GenerationResult:
+        """Generate MCP tools from API operations"""
+        try:
+            from .mcp_tool_mapper import MCPToolMapper
+            
+            # Create tool mapper
+            self.tool_mapper = MCPToolMapper(client_analysis)
+            
+            # Generate tool definitions
+            tool_definitions = self.tool_mapper.generate_tool_definitions()
+            
+            # Limit number of tools if specified
+            if max_tools and len(tool_definitions) > max_tools:
+                tool_definitions = tool_definitions[:max_tools]
+                self.logger.warning(f"Limited tools to {max_tools} (was {len(tool_definitions)})")
+            
+            # Generate tools.py file
+            service_dir = config.get_mcp_package_path()
+            
+            tools_content = self.render_template("openapi_enhanced/tools.py.j2", {
+                "service_name": config.service_name,
+                "project_name": config.project_name,
+                "client_package_name": client_analysis.client_package_name,
+                "tool_definitions": tool_definitions,
+                "api_classes": client_analysis.api_classes,
+                "operations": client_analysis.operations,
+                "base_url": client_analysis.base_url,
+                "auth_schemes": client_analysis.auth_schemes
+            })
+            
+            tools_path = service_dir / "tools.py"
+            self.write_file(tools_path, tools_content)
+            
+            return GenerationResult(
+                success=True,
+                files_created=[str(tools_path)],
+                errors=[],
+                warnings=[]
+            )
+            
+        except Exception as e:
+            return GenerationResult(
+                success=False,
+                files_created=[],
+                errors=[f"MCP tools generation failed: {str(e)}"],
+                warnings=[]
+            )
+    
+    def _generate_mcp_server(self, project_path: Path, config: MCPProjectConfig, 
+                            client_analysis: ClientAnalysis) -> GenerationResult:
+        """Generate MCP server with API client integration"""
+        try:
+            service_dir = config.get_mcp_package_path()
+            
+            # Generate server.py file
+            server_content = self.render_template("openapi_enhanced/server.py.j2", {
+                "service_name": config.service_name,
+                "project_name": config.project_name,
+                "description": config.description,
+                "client_package_name": client_analysis.client_package_name,
+                "api_classes": client_analysis.api_classes,
+                "base_url": client_analysis.base_url,
+                "auth_schemes": client_analysis.auth_schemes,
+                "tools_count": len(client_analysis.operations)
+            })
+            
+            server_path = service_dir / "server.py"
+            self.write_file(server_path, server_content)
+            
+            # Generate __init__.py file
+            init_content = self.render_template("python/__init__.py.j2", {
+                "service_name": config.service_name,
+                "project_name": config.project_name
+            })
+            
+            init_path = service_dir / "__init__.py"
+            self.write_file(init_path, init_content)
+            
+            return GenerationResult(
+                success=True,
+                files_created=[str(server_path), str(init_path)],
+                errors=[],
+                warnings=[]
+            )
+            
+        except Exception as e:
+            return GenerationResult(
+                success=False,
+                files_created=[],
+                errors=[f"MCP server generation failed: {str(e)}"],
+                warnings=[]
+            )
+    
+    def _generate_documentation(self, project_path: Path, config: MCPProjectConfig, 
+                               client_analysis: ClientAnalysis, include_examples: bool) -> GenerationResult:
+        """Generate documentation and examples"""
+        try:
+            files_created = []
+            
+            # Generate API documentation
+            docs_dir = project_path / "docs"
+            
+            api_docs_content = self.render_template("docs/api_reference.md.j2", {
+                "project_name": config.project_name,
+                "service_name": config.service_name,
+                "client_analysis": client_analysis,
+                "operations": client_analysis.operations,
+                "models": client_analysis.models
+            })
+            
+            api_docs_path = docs_dir / "api_reference.md"
+            self.write_file(api_docs_path, api_docs_content)
+            files_created.append(str(api_docs_path))
+            
+            # Generate usage examples if requested
+            if include_examples:
+                examples_content = self.render_template("docs/usage_examples.md.j2", {
+                    "project_name": config.project_name,
+                    "service_name": config.service_name,
+                    "operations": client_analysis.operations[:5]  # Limit to first 5 operations
+                })
+                
+                examples_path = docs_dir / "usage_examples.md"
+                self.write_file(examples_path, examples_content)
+                files_created.append(str(examples_path))
+            
+            return GenerationResult(
+                success=True,
+                files_created=files_created,
+                errors=[],
+                warnings=[]
+            )
+            
+        except Exception as e:
+            return GenerationResult(
+                success=False,
+                files_created=[],
+                errors=[f"Documentation generation failed: {str(e)}"],
+                warnings=[]
+            )
+    
+    def _combine_results(self, results: List[GenerationResult]) -> GenerationResult:
+        """Combine multiple generation results into one"""
+        all_files_created = []
+        all_errors = []
+        all_warnings = []
+        overall_success = True
         
-        # Phase 3: Generate MCP tool mappings
-        tools_result = self._generate_mcp_tools(project_path, config, client_analysis)
+        for result in results:
+            all_files_created.extend(result.files_created)
+            all_errors.extend(result.errors)
+            all_warnings.extend(result.warnings)
+            if not result.success:
+                overall_success = False
         
-        # Phase 4: Generate MCP server integration
-        server_result = self._generate_mcp_server(project_path, config, client_analysis)
-        
-        # Phase 5: Generate tests and documentation
-        docs_result = self._generate_documentation(project_path, config, client_analysis)
-        
-        return self._combine_results([client_result, tools_result, server_result, docs_result])
+        return GenerationResult(
+            success=overall_success,
+            files_created=all_files_created,
+            errors=all_errors,
+            warnings=all_warnings
+        )
 
 class MCPGenerator(BaseGenerator):
     """
@@ -921,6 +1186,7 @@ class MCPGenerator(BaseGenerator):
         self.test_generator = TestGenerator()
         self.config_generator = ConfigGenerator()
         self.docker_generator = DockerGenerator()
+        self.openapi_enhanced_generator = OpenAPIEnhancedGenerator()
     
     def generate(self, project_path: Path, config: MCPProjectConfig) -> GenerationResult:
         """
@@ -1150,3 +1416,142 @@ class MCPGenerator(BaseGenerator):
             errors.append("Python version must be in format 'X.Y' (e.g., '3.11')")
         
         return errors
+    
+    def generate_from_openapi(self, project_path: Path, config: MCPProjectConfig, 
+                             openapi_data: Dict[str, Any], include_examples: bool = False, 
+                             max_tools: int = 50) -> GenerationResult:
+        """
+        Generate complete MCP server project from OpenAPI specification
+        
+        Creates a comprehensive MCP server project that includes:
+        - Standard project structure and configuration
+        - Generated API client from OpenAPI spec
+        - MCP tools mapped from API operations
+        - Enhanced server with API integration
+        - Comprehensive tests and documentation
+        
+        Args:
+            project_path: Target project directory
+            config: Project configuration containing all generation settings
+            openapi_data: Parsed OpenAPI specification
+            include_examples: Whether to generate usage examples
+            max_tools: Maximum number of tools to generate from API operations
+            
+        Returns:
+            GenerationResult: Aggregated result from all component generators
+            
+        Example:
+            generator = MCPGenerator()
+            config = MCPProjectConfig.from_openapi_spec("api.json", author="Developer")
+            
+            with open("api.json") as f:
+                openapi_data = json.load(f)
+                
+            result = generator.generate_from_openapi(
+                Path("./output"), 
+                config, 
+                openapi_data,
+                include_examples=True,
+                max_tools=25
+            )
+        """
+        all_files_created = []
+        all_errors = []
+        all_warnings = []
+        
+        try:
+            # Phase 1: Generate standard project structure first
+            standard_result = self.generate(project_path, config)
+            all_files_created.extend(standard_result.files_created)
+            all_errors.extend(standard_result.errors)
+            all_warnings.extend(standard_result.warnings)
+            
+            if not standard_result.success:
+                all_warnings.append("Standard project generation had issues, continuing with OpenAPI generation")
+            
+            # Phase 2: Generate OpenAPI-enhanced components
+            openapi_result = self.openapi_enhanced_generator.generate(
+                project_path, 
+                config, 
+                openapi_data,
+                include_examples=include_examples,
+                max_tools=max_tools
+            )
+            all_files_created.extend(openapi_result.files_created)
+            all_errors.extend(openapi_result.errors)
+            all_warnings.extend(openapi_result.warnings)
+            
+            # Phase 3: Update project summary with OpenAPI information
+            summary_result = self._generate_openapi_project_summary(
+                project_path, config, all_files_created, openapi_data
+            )
+            if summary_result:
+                all_files_created.append(summary_result)
+            
+            # Determine overall success
+            overall_success = standard_result.success and openapi_result.success
+            
+            if not overall_success:
+                all_errors.append("One or more components failed during OpenAPI project generation")
+            
+            return GenerationResult(
+                success=overall_success,
+                files_created=all_files_created,
+                errors=all_errors,
+                warnings=all_warnings
+            )
+            
+        except Exception as e:
+            all_errors.append(f"Failed to generate OpenAPI MCP project: {str(e)}")
+            return GenerationResult(
+                success=False,
+                files_created=all_files_created,
+                errors=all_errors,
+                warnings=all_warnings
+            )
+    
+    def _generate_openapi_project_summary(self, project_path: Path, config: MCPProjectConfig, 
+                                         files_created: List[str], openapi_data: Dict[str, Any]) -> str:
+        """Generate enhanced project summary with OpenAPI information"""
+        try:
+            # Extract OpenAPI info
+            info = openapi_data.get('info', {})
+            paths = openapi_data.get('paths', {})
+            components = openapi_data.get('components', {})
+            
+            # Count operations
+            operations_count = sum(len(methods) for methods in paths.values() if isinstance(methods, dict))
+            
+            # Count models
+            models_count = len(components.get('schemas', {}))
+            
+            summary_content = self.render_template("project/PROJECT_SUMMARY.md.j2", {
+                "project_name": config.project_name,
+                "service_name": config.service_name,
+                "description": config.description,
+                "author": config.author,
+                "version": config.version,
+                "python_version": config.python_version,
+                "test_framework": config.test_framework,
+                "include_docker": config.include_docker,
+                "include_ci": config.include_ci,
+                "files_created": files_created,
+                "file_count": len(files_created) + 1,  # +1 for the summary file itself
+                "openapi_info": {
+                    "title": info.get('title', 'Unknown API'),
+                    "version": info.get('version', '1.0.0'),
+                    "description": info.get('description', ''),
+                    "operations_count": operations_count,
+                    "models_count": models_count,
+                    "base_url": openapi_data.get('servers', [{}])[0].get('url', '') if openapi_data.get('servers') else ''
+                }
+            })
+            
+            summary_path = project_path / "PROJECT_SUMMARY.md"
+            self.write_file(summary_path, summary_content)
+            return str(summary_path)
+            
+        except Exception as e:
+            # Don't fail the entire generation for summary file issues
+            self.logger.warning(f"Failed to generate OpenAPI project summary: {e}")
+            return None

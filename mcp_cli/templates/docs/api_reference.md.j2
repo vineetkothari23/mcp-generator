@@ -1,0 +1,112 @@
+# {{ project_name }} API Reference
+
+This document provides a comprehensive reference for the {{ project_name }} MCP server, which integrates with the {{ client_analysis.client_package_name }} API client.
+
+## Overview
+
+- **Service Name**: {{ service_name }}
+- **Client Package**: {{ client_analysis.client_package_name }}
+{% if client_analysis.base_url -%}
+- **Base URL**: {{ client_analysis.base_url }}
+{% endif -%}
+- **Total Operations**: {{ operations|length }}
+- **Total Models**: {{ models|length }}
+
+## Authentication
+
+{% if client_analysis.auth_schemes -%}
+This API supports the following authentication schemes:
+{% for auth_scheme in client_analysis.auth_schemes -%}
+- {{ auth_scheme }}
+{% endfor %}
+{% else -%}
+No authentication schemes detected.
+{% endif %}
+
+## API Operations
+
+The following operations are available as MCP tools:
+
+{% for operation in operations -%}
+### {{ operation.name }}
+
+- **Method**: {{ operation.method }}
+- **Path**: {{ operation.path }}
+- **API Class**: {{ operation.api_class }}
+{% if operation.summary -%}
+- **Summary**: {{ operation.summary }}
+{% endif -%}
+{% if operation.description -%}
+- **Description**: {{ operation.description }}
+{% endif -%}
+
+{% if operation.parameters -%}
+**Parameters:**
+{% for param in operation.parameters -%}
+- `{{ param.name }}` ({{ param.type }}): {{ param.description or 'No description' }}
+{% endfor %}
+{% endif -%}
+
+{% if operation.request_body_type -%}
+**Request Body Type**: {{ operation.request_body_type }}
+{% endif -%}
+
+{% if operation.response_type -%}
+**Response Type**: {{ operation.response_type }}
+{% endif -%}
+
+---
+
+{% endfor %}
+
+## Data Models
+
+{% if models -%}
+The following data models are available:
+
+{% for model in models -%}
+### {{ model.name }}
+
+{% if model.properties -%}
+**Properties:**
+{% for prop in model.properties -%}
+- `{{ prop }}`
+{% endfor %}
+{% endif -%}
+
+{% if model.required_fields -%}
+**Required Fields:**
+{% for field in model.required_fields -%}
+- `{{ field }}`
+{% endfor %}
+{% endif -%}
+
+---
+
+{% endfor %}
+{% else -%}
+No data models detected in the API specification.
+{% endif %}
+
+## Usage
+
+To use this MCP server, connect to it using an MCP-compatible client and call the available tools. Each API operation is exposed as a separate MCP tool with the same name as the operation.
+
+Example tool names:
+{% for operation in operations[:5] -%}
+- `{{ operation.name }}`
+{% endfor -%}
+{% if operations|length > 5 -%}
+- ... and {{ operations|length - 5 }} more
+{% endif %}
+
+## Error Handling
+
+The server includes comprehensive error handling for:
+- API client errors
+- Authentication failures
+- Invalid parameters
+- Network connectivity issues
+- Rate limiting
+
+All errors are properly formatted and returned as MCP error responses. 
