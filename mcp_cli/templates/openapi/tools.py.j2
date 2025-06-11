@@ -106,7 +106,6 @@ class {{ service_name|pascal_case }}Tools:
     
     {% for endpoint in endpoints %}
     {% set tool_name = endpoint.operation_id or (endpoint.method.lower() + '_' + endpoint.path.replace('/', '_').replace('{', '').replace('}', '')) %}
-    @server.call_tool()
     async def _{{ tool_name }}(self, arguments: Dict[str, Any]) -> Any:
         """
         {{ endpoint.summary or endpoint.description or 'Execute API operation' }}
@@ -146,7 +145,7 @@ class {{ service_name|pascal_case }}Tools:
             # Build request path
             path = "{{ endpoint.path }}"
             for param_name, param_value in path_params.items():
-                path = path.replace(f"{{{param_name}}}", str(param_value))
+                path = path.replace("{{" + param_name + "}}", str(param_value))
             
             # Make API request
             response = await self.client.make_request(

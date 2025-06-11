@@ -1,0 +1,77 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lynnx-blog-mcp-server"
+version = "1.0.0"
+description = "API for managing blog posts, including comments and user interactions"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "Developer", email = "developer@example.com"}
+]
+keywords = ["mcp", "model-context-protocol", "lynnx_blog_mcp_server"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+dependencies = [
+    "mcp>=1.0.0",
+    "pydantic>=2.5.0",
+    "httpx>=0.25.0",
+    "PyYAML>=6.0.1",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.3",
+    "pytest-asyncio>=0.21.1",
+    "pytest-cov>=4.1.0",
+    "black>=23.11.0",
+    "isort>=5.12.0",
+    "mypy>=1.7.0",
+]
+
+[project.scripts]
+lynnx-blog-mcp-server-server = "lynnx_blog_mcp_server.server:main"
+
+[project.urls]
+Homepage = "https://github.com/your-org/lynnx-blog-mcp-server"
+Repository = "https://github.com/your-org/lynnx-blog-mcp-server.git"
+Issues = "https://github.com/your-org/lynnx-blog-mcp-server/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["mcp_lynnx_blog_mcp_server*"]
+
+[tool.black]
+line-length = 100
+target-version = ['py311']
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = [
+    "--verbose",
+    "--cov=src/mcp_lynnx_blog_mcp_server",
+    "--cov-report=term-missing",
+    "--cov-fail-under=80"
+] 

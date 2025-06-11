@@ -25,6 +25,7 @@ from jinja2 import Environment, FileSystemLoader
 import subprocess
 import shutil
 from .openapi_client_generator import OpenAPIClientGenerator
+from .generators import OpenAPIEnhancedGenerator
 from .mcp_tool_mapper import MCPToolMapper
 
 # Import our template generators
@@ -43,21 +44,9 @@ from .utils import (
     install_dependencies,
     run_initial_tests
 )
+from .config import MCPProjectConfig
 
-@dataclass
-class MCPProjectConfig:
-    """Configuration for MCP project generation"""
-    project_name: str
-    service_name: str
-    description: str
-    author: str
-    version: str = "1.0.0"
-    python_version: str = "3.11"
-    include_docker: bool = True
-    include_ci: bool = True
-    test_framework: str = "pytest"
-    openapi_spec: Optional[str] = None
-    output_dir: str = "."
+
 
 class MCPCLIError(Exception):
     """Custom exception for MCP CLI errors"""
@@ -202,15 +191,89 @@ def from_openapi(ctx, spec, name, output_dir, author, generator_engine, async_cl
     Uses either basic generation or enhanced generation with openapi-generator.
     Enhanced mode provides more robust API client generation and better OpenAPI support.
     """
+    cli_instance = ctx.obj['cli']
     
-    if generator_engine == 'enhanced':
-        # Use OpenAPIEnhancedGenerator
-        generator = OpenAPIEnhancedGenerator()
-    else:
-        # Use existing OpenAPIGenerator  
-        generator = OpenAPIGenerator()
-    
-    # Rest of implementation...
+    try:
+        click.echo(f"🚀 Generating MCP server from OpenAPI specification: {spec}")
+        
+        # Load OpenAPI spec
+        openapi_data = _load_openapi_spec(spec)
+        click.echo("✅ OpenAPI specification loaded successfully")
+        
+        # Validate spec if requested
+        if validate_only:
+            click.echo("✅ OpenAPI specification is valid")
+            return
+        
+        # Extract or use provided project name
+        if not name:
+            name = _extract_project_name_from_openapi(openapi_data)
+            click.echo(f"📝 Auto-generated project name: {name}")
+        
+        # Validate project name
+        name = cli_instance.validate_project_name(name)
+        
+        # Create project configuration
+        config = MCPProjectConfig(
+            project_name=name,
+            service_name=name.replace('-', '_'),
+            description=openapi_data.get('info', {}).get('description', f'MCP server for {name}'),
+            author=author,
+            output_dir=output_dir,
+            openapi_spec=spec
+        )
+        
+        # Configure OpenAPI generator settings
+        if async_client:
+            config.openapi_config.client_type = "asyncio"
+        
+        if client_config:
+            # Load custom config if provided
+            import json
+            with open(client_config, 'r') as f:
+                custom_config = json.load(f)
+                config.openapi_config.additional_properties.update(custom_config)
+        
+        # Generate project
+        click.echo(f"🔨 Generating MCP server project using {generator_engine} engine...")
+        
+        if generator_engine == 'enhanced':
+            # Use enhanced generator with OpenAPI integration
+            project_path = _generate_openapi_project(
+                cli_instance, 
+                config, 
+                openapi_data,
+                include_examples=include_examples,
+                max_tools=max_tools
+            )
+        else:
+            # Use basic generator
+            project_path = _generate_standard_project(cli_instance, config)
+            
+            # Add OpenAPI-specific components using basic generator
+            cli_instance.generators["openapi"].generate(
+                Path(project_path), 
+                config, 
+                openapi_data,
+                include_examples=include_examples,
+                max_tools=max_tools
+            )
+        
+        click.echo(f"✅ MCP server project generated successfully!")
+        click.echo(f"📁 Project location: {project_path}")
+        click.echo(f"🔧 Next steps:")
+        click.echo(f"   cd {project_path}")
+        click.echo(f"   pip install -e .")
+        click.echo(f"   python -m mcp_{config.service_name}.server")
+        
+    except MCPCLIError as e:
+        click.echo(f"❌ Error: {e}", err=True)
+        sys.exit(1)
+    except Exception as e:
+        click.echo(f"❌ Unexpected error: {e}", err=True)
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 
 @cli.command()
 @click.option('--spec', '-s', required=True, help='OpenAPI spec file path or URL')

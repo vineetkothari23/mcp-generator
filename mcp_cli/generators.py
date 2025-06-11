@@ -88,6 +88,11 @@ class BaseGenerator:
             lstrip_blocks=True
         )
         
+        # Add custom filters
+        self.env.filters['snake_case'] = self._to_snake_case
+        self.env.filters['pascal_case'] = self._to_pascal_case
+        self.env.filters['kebab_case'] = self._to_kebab_case
+        
         # Add custom filters for template processing
         self.env.filters['snake_case'] = self._to_snake_case
         self.env.filters['pascal_case'] = self._to_pascal_case
@@ -485,7 +490,8 @@ class OpenAPIGenerator(BaseGenerator):
         
         service_dir = project_path / "src" / f"mcp_{config.service_name}"
         
-        models_content = self.render_template("openapi/models.py.j2", {
+        # Use existing models template for now
+        models_content = self.render_template("python/models.py.j2", {
             "service_name": config.service_name,
             "models": analysis.models,
             "project_name": config.project_name
@@ -508,7 +514,8 @@ class OpenAPIGenerator(BaseGenerator):
         # Extract authentication information
         security_schemes = openapi_data.get('components', {}).get('securitySchemes', {})
         
-        client_content = self.render_template("openapi/client.py.j2", {
+        # Use existing client template for now
+        client_content = self.render_template("python/client.py.j2", {
             "service_name": config.service_name,
             "base_url": base_url,
             "endpoints": analysis.endpoints,
@@ -540,7 +547,8 @@ class OpenAPIGenerator(BaseGenerator):
         
         service_dir = project_path / "src" / f"mcp_{config.service_name}"
         
-        server_content = self.render_template("openapi/server.py.j2", {
+        # Use existing server template for now
+        server_content = self.render_template("python/server.py.j2", {
             "service_name": config.service_name,
             "project_name": config.project_name,
             "description": config.description,
@@ -555,70 +563,23 @@ class OpenAPIGenerator(BaseGenerator):
     def _generate_openapi_tests(self, project_path: Path, config, analysis: OpenAPIAnalysis, files_created: List[str]):
         """Generate comprehensive tests for OpenAPI-based MCP server"""
         
-        # Generate unit tests for tools
-        test_tools_content = self.render_template("openapi/test_tools.py.j2", {
-            "service_name": config.service_name,
-            "endpoints": analysis.endpoints[:5],  # Sample of endpoints for testing
-            "project_name": config.project_name
-        })
-        
-        test_tools_path = project_path / "tests" / "unit" / "test_tools.py"
-        self.write_file(test_tools_path, test_tools_content)
-        files_created.append(str(test_tools_path))
-        
-        # Generate integration tests
-        test_integration_content = self.render_template("openapi/test_integration.py.j2", {
-            "service_name": config.service_name,
-            "project_name": config.project_name
-        })
-        
-        test_integration_path = project_path / "tests" / "integration" / "test_api_integration.py"
-        self.write_file(test_integration_path, test_integration_content)
-        files_created.append(str(test_integration_path))
+        # Skip OpenAPI-specific tests for now - use existing test generation
+        # TODO: Create OpenAPI-specific test templates
+        pass
     
     def _generate_examples(self, project_path: Path, config, analysis: OpenAPIAnalysis, files_created: List[str]):
         """Generate usage examples and documentation"""
         
-        examples_content = self.render_template("openapi/examples.py.j2", {
-            "service_name": config.service_name,
-            "endpoints": analysis.endpoints[:3],  # Show first 3 endpoints as examples
-            "project_name": config.project_name
-        })
-        
-        examples_path = project_path / "examples" / "usage_examples.py"
-        self.write_file(examples_path, examples_content)
-        files_created.append(str(examples_path))
-        
-        # Generate usage documentation
-        usage_doc_content = self.render_template("openapi/USAGE.md.j2", {
-            "project_name": config.project_name,
-            "service_name": config.service_name,
-            "endpoints": analysis.endpoints,
-            "tools_count": analysis.tools_count
-        })
-        
-        usage_doc_path = project_path / "docs" / "USAGE_EXAMPLES.md"
-        self.write_file(usage_doc_path, usage_doc_content)
-        files_created.append(str(usage_doc_path))
+        # Skip examples for now - focus on core functionality
+        # TODO: Create OpenAPI-specific example templates
+        pass
     
     def _generate_openapi_config(self, project_path: Path, config, openapi_data: Dict[str, Any], files_created: List[str]):
         """Generate OpenAPI-specific configuration files"""
         
-        # Extract server and security information for configuration
-        servers = openapi_data.get('servers', [])
-        security_schemes = openapi_data.get('components', {}).get('securitySchemes', {})
-        
-        config_content = self.render_template("openapi/api_config.yaml.j2", {
-            "project_name": config.project_name,
-            "service_name": config.service_name,
-            "servers": servers,
-            "security_schemes": security_schemes,
-            "api_info": openapi_data.get('info', {})
-        })
-        
-        config_path = project_path / "config" / "api_config.yaml"
-        self.write_file(config_path, config_content)
-        files_created.append(str(config_path))
+        # Skip OpenAPI config for now - use standard config
+        # TODO: Create OpenAPI-specific config template
+        pass
 
 class TestGenerator(BaseGenerator):
     """Generator for comprehensive test suites"""

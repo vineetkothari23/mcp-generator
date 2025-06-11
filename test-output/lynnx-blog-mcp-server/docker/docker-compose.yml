@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  lynnx_blog_mcp_server:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: lynnx-blog-mcp-server-server
+    ports:
+      - "8080:8080"
+    environment:
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=8080
+    env_file:
+      - .env
+    volumes:
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - lynnx_blog_mcp_server-network
+
+  # Optional: Add a reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: lynnx-blog-mcp-server-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - lynnx_blog_mcp_server
+    networks:
+      - lynnx_blog_mcp_server-network
+    profiles:
+      - proxy
+
+networks:
+  lynnx_blog_mcp_server-network:
+    driver: bridge
+
+volumes:
+  lynnx_blog_mcp_server-logs:
+    driver: local 
