@@ -993,7 +993,9 @@ class MCPGenerator(BaseGenerator):
                     all_warnings.append("Docker generation failed")
             
             # Phase 5: Generate project summary
-            self._generate_project_summary(project_path, config, all_files_created)
+            summary_result = self._generate_project_summary(project_path, config, all_files_created)
+            if summary_result:
+                all_files_created.append(summary_result)
             
             # Determine overall success
             critical_failures = [
@@ -1071,7 +1073,7 @@ class MCPGenerator(BaseGenerator):
                 warnings=[]
             )
     
-    def _generate_project_summary(self, project_path: Path, config: MCPProjectConfig, files_created: List[str]) -> None:
+    def _generate_project_summary(self, project_path: Path, config: MCPProjectConfig, files_created: List[str]) -> str:
         """Generate a project summary file with generation details"""
         try:
             summary_content = self.render_template("project/PROJECT_SUMMARY.md.j2", {
@@ -1085,16 +1087,16 @@ class MCPGenerator(BaseGenerator):
                 "include_docker": config.include_docker,
                 "include_ci": config.include_ci,
                 "files_created": files_created,
-                "file_count": len(files_created)
+                "file_count": len(files_created) + 1  # +1 for the summary file itself
             })
             
             summary_path = project_path / "PROJECT_SUMMARY.md"
             self.write_file(summary_path, summary_content)
-            files_created.append(str(summary_path))
+            return str(summary_path)
             
         except Exception as e:
             # Don't fail the entire generation for summary file issues
-            pass
+            return None
     
     def get_generation_order(self) -> List[str]:
         """

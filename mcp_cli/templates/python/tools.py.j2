@@ -82,7 +82,6 @@ class {{ service_name|pascal_case }}Tools:
         
         raise ValueError(f"Unknown tool: {name}")
     
-    @server.call_tool()
     async def _hello_world(self, arguments: Dict[str, Any]) -> str:
         """
         Simple hello world tool

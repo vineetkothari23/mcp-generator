@@ -361,4 +361,54 @@ class TestMCPGeneratorIntegration:
         
         # Verify reasonable order (structure should be first)
         assert order[0] == "Project Structure"
-        assert order[-1] == "Project Summary" 
+        assert order[-1] == "Project Summary"
+    
+    def test_generated_project_basic_functionality(self):
+        """Test that generated project has basic working functionality"""
+        import tempfile
+        import sys
+        from pathlib import Path
+        
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_path = Path(temp_dir) / self.config.project_name
+            
+            # Generate the project
+            result = self.generator.generate(project_path, self.config)
+            assert result.success is True
+            
+            # Add the generated project to Python path temporarily
+            src_path = project_path / "src"
+            sys.path.insert(0, str(src_path))
+            
+            try:
+                # Test that we can import the generated module
+                module_name = f"mcp_{self.config.service_name}"
+                
+                # Import the main module
+                import importlib
+                main_module = importlib.import_module(module_name)
+                assert main_module is not None
+                
+                # Import and instantiate the server
+                server_module = importlib.import_module(f"{module_name}.server")
+                assert hasattr(server_module, 'MCPServer')
+                
+                # Import the config module
+                config_module = importlib.import_module(f"{module_name}.config")
+                assert hasattr(config_module, 'Config')
+                
+                # Import the tools module
+                tools_module = importlib.import_module(f"{module_name}.tools")
+                assert hasattr(tools_module, 'MCPTools')
+                
+            finally:
+                # Clean up Python path
+                sys.path.remove(str(src_path))
+                
+                # Remove imported modules from cache
+                modules_to_remove = [
+                    name for name in sys.modules.keys() 
+                    if name.startswith(f"mcp_{self.config.service_name}")
+                ]
+                for module_name in modules_to_remove:
+                    del sys.modules[module_name] 
