@@ -2,10 +2,11 @@
 MCP Tool Mapper - Maps OpenAPI operations to MCP tools
 
 Analyzes generated API client and creates MCP tool definitions
-that wrap the client methods.
+that wrap the client methods. Enhanced to generate project configurations.
 """
 from .openapi_client_generator import ClientAnalysis, Operation
-from typing import List, Dict, Any
+from .config import MCPProjectConfig, MCPIntegrationConfig, OpenAPIGeneratorConfig
+from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
 import re
 
@@ -44,11 +45,12 @@ class ToolDefinition:
 
 class MCPToolMapper:
     """
-    Maps OpenAPI operations to MCP tool definitions.
+    Maps OpenAPI operations to MCP tool definitions and generates project configurations.
     
     Takes a ClientAnalysis object containing parsed API operations
     and generates corresponding MCP tool definitions with proper
-    JSON schemas for input validation.
+    JSON schemas for input validation. Enhanced to create project
+    configurations from the analysis.
     """
     
     def __init__(self, client_analysis: ClientAnalysis):
@@ -104,6 +106,206 @@ class MCPToolMapper:
             tool_definitions.append(tool_def)
         
         return tool_definitions
+    
+    def generate_mcp_project_config(
+        self, 
+        project_name: str, 
+        author: str,
+        description: Optional[str] = None,
+        version: str = "1.0.0",
+        **kwargs
+    ) -> MCPProjectConfig:
+        """
+        Generate MCPProjectConfig from ClientAnalysis.
+        
+        Creates a complete project configuration based on the analyzed
+        API client, inferring appropriate settings from the operations
+        and models discovered.
+        
+        Args:
+            project_name: Name of the MCP project
+            author: Project author
+            description: Project description (auto-generated if not provided)
+            version: Project version
+            **kwargs: Additional configuration options
+            
+        Returns:
+            MCPProjectConfig: Complete project configuration
+            
+        Example:
+            config = mapper.generate_mcp_project_config(
+                project_name="pet-store-mcp",
+                author="Developer"
+            )
+        """
+        # Generate service name from project name
+        service_name = self._sanitize_service_name(project_name)
+        
+        # Auto-generate description if not provided
+        if not description:
+            if self.client_analysis.operations:
+                op_count = len(self.client_analysis.operations)
+                description = f"MCP server with {op_count} API operations"
+            else:
+                description = f"MCP server for {project_name}"
+        
+        # Generate OpenAPI config from client analysis
+        openapi_config = OpenAPIGeneratorConfig(
+            package_name=self.client_analysis.client_package_name or f"{service_name}_client",
+            generator_type="python",
+            client_type="sync"
+        )
+        
+        # Generate MCP integration config
+        mcp_config = self.generate_mcp_integration_config()
+        
+        return MCPProjectConfig(
+            project_name=project_name,
+            service_name=service_name,
+            description=description,
+            author=author,
+            version=version,
+            openapi_config=openapi_config,
+            mcp_config=mcp_config,
+            **kwargs
+        )
+    
+    def generate_mcp_integration_config(self) -> MCPIntegrationConfig:
+        """
+        Generate MCPIntegrationConfig based on ClientAnalysis.
+        
+        Analyzes the operations and models to determine appropriate
+        MCP integration settings, such as tool limits, feature flags,
+        and naming conventions.
+        
+        Returns:
+            MCPIntegrationConfig: MCP integration configuration
+            
+        Example:
+            mcp_config = mapper.generate_mcp_integration_config()
+        """
+        operations = self.client_analysis.operations
+        auth_schemes = self.client_analysis.auth_schemes or []
+        
+        # Determine max tools based on operation count
+        max_tools = max(len(operations), 10)  # At least 10, or operation count
+        
+        # Check if auth tools should be included
+        include_auth_tools = len(auth_schemes) > 0
+        
+        # Check for file upload operations
+        include_file_upload_tools = any(
+            op.request_body_type and "file" in op.request_body_type.lower()
+            for op in operations
+        )
+        
+        # Check for pagination patterns (common query parameters)
+        generate_pagination_helpers = any(
+            any(
+                param.get("name", "").lower() in ["limit", "offset", "page", "per_page"]
+                for param in op.parameters
+            )
+            for op in operations
+        )
+        
+        return MCPIntegrationConfig(
+            max_tools=max_tools,
+            include_auth_tools=include_auth_tools,
+            include_file_upload_tools=include_file_upload_tools,
+            generate_pagination_helpers=generate_pagination_helpers,
+            generate_tool_examples=True,
+            tool_naming_convention="operation_id"
+        )
+    
+    def filter_operations_by_config(self, mcp_config: MCPIntegrationConfig) -> List[Operation]:
+        """
+        Filter operations based on MCP integration configuration.
+        
+        Applies the configuration rules to determine which operations
+        should be included as MCP tools.
+        
+        Args:
+            mcp_config: MCP integration configuration
+            
+        Returns:
+            List[Operation]: Filtered list of operations
+            
+        Example:
+            config = MCPIntegrationConfig(max_tools=5)
+            filtered_ops = mapper.filter_operations_by_config(config)
+        """
+        operations = self.client_analysis.operations.copy()
+        
+        # Filter operations that should be included
+        filtered_operations = []
+        
+        for operation in operations:
+            # Convert operation to dict format expected by should_include_operation
+            operation_dict = {
+                "method": operation.method,
+                "deprecated": getattr(operation, 'deprecated', False),
+                "parameters": operation.parameters,
+                "requestBody": {"content": {"multipart/form-data": {}}} if operation.request_body_type and "file" in operation.request_body_type.lower() else {}
+            }
+            
+            if mcp_config.should_include_operation(operation_dict):
+                filtered_operations.append(operation)
+            
+            # Stop if we've reached the max tools limit
+            if len(filtered_operations) >= mcp_config.max_tools:
+                break
+        
+        return filtered_operations
+    
+    def estimate_complexity(self) -> str:
+        """
+        Estimate project complexity based on ClientAnalysis.
+        
+        Analyzes the number of operations, models, and other factors
+        to provide a complexity estimate.
+        
+        Returns:
+            str: Complexity level ("Simple", "Medium", "Complex", "Very Complex")
+            
+        Example:
+            complexity = mapper.estimate_complexity()
+        """
+        operations_count = len(self.client_analysis.operations)
+        models_count = len(self.client_analysis.models)
+        auth_count = len(self.client_analysis.auth_schemes or [])
+        
+        # Calculate complexity score
+        score = operations_count + (models_count * 0.5) + (auth_count * 2)
+        
+        if score < 10:
+            return "Simple"
+        elif score < 30:
+            return "Medium"
+        elif score < 100:
+            return "Complex"
+        else:
+            return "Very Complex"
+    
+    def _sanitize_service_name(self, name: str) -> str:
+        """Sanitize service name to be a valid Python identifier"""
+        # Convert to snake_case
+        name = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', name)
+        name = name.lower()
+        
+        # Replace invalid characters with underscore
+        name = re.sub(r'[^a-zA-Z0-9_]', '_', name)
+        
+        # Ensure it doesn't start with a number
+        if name and name[0].isdigit():
+            name = f"service_{name}"
+        
+        # Remove multiple consecutive underscores
+        name = re.sub(r'_+', '_', name)
+        
+        # Remove leading/trailing underscores
+        name = name.strip('_')
+        
+        return name or "api_service"
     
     def _generate_tool_name(self, operation: Operation) -> str:
         """
@@ -306,38 +508,4 @@ class MCPToolMapper:
         # Remove leading/trailing underscores
         text = text.strip('_')
         
-        return text        
-        def generate_tool_implementation_mapping(self) -> Dict[str, Any]:
-            """Generate mapping data for tool implementations"""
-            return {
-                'tool_definitions': self.generate_tool_definitions(),
-                'api_classes': self.client_analysis.api_classes,
-                'operations': self.client_analysis.operations,
-                'template_context': {
-                    'project_name': self.project_name,
-                    'class_name': self.class_name,
-                    # ... other context data
-                }
-            }
-    
-    def generate_tool_test_mapping(self) -> Dict[str, Any]:
-        """Generate mapping data for tool tests"""
-        return {
-            'tools_to_test': self.generate_tool_definitions(),
-            'test_scenarios': self._generate_test_scenarios(),
-            'mock_data': self._generate_mock_data(),
-            'api_operations': self.client_analysis.operations
-        }
-    
-    def generate_tool_implementation_mapping(self) -> Dict[str, Any]:
-        """Generate mapping data for tool implementations"""
-        return {
-            'tool_definitions': self.generate_tool_definitions(),
-            'api_classes': self.client_analysis.api_classes,
-            'operations': self.client_analysis.operations,
-            'template_context': {
-                'project_name': self.project_name,
-                'class_name': self.class_name,
-                # ... other context data
-            }
-        }
+        return text

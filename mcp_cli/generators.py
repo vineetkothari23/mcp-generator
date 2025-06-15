@@ -318,7 +318,9 @@ class ProjectStructureGenerator(BaseGenerator):
         files_created.append(str(readme_path))
 
 class OpenAPIGenerator(BaseGenerator):
-    """Generator for OpenAPI-specific MCP server components"""
+    """Generator for OpenAPI-specific MCP server components 
+    - Uses custom client generator to generate the client from the openAPI spec
+    """
     
     def analyze_spec(self, openapi_data: Dict[str, Any]) -> OpenAPIAnalysis:
         """
@@ -818,26 +820,33 @@ class ConfigGenerator(BaseGenerator):
                 warnings=[]
             )
 
-class OpenAPIEnhancedGenerator(BaseGenerator):
+class OpenAPIEnhancedGenerator(OpenAPIGenerator):
     """Enhanced OpenAPI generator using openapi-generator
     
-    This generator creates MCP servers from OpenAPI specifications by:
-    1. Using openapi-generator to create a Python API client
-    2. Analyzing the generated client to extract operations and models
-    3. Mapping API operations to MCP tools using MCPToolMapper
-    4. Generating MCP server code that integrates with the API client
-    5. Creating comprehensive tests and documentation
+    This generator extends OpenAPIGenerator but uses openapi-generator to create
+    a more robust Python API client instead of the template-based approach.
+    
+    The generation process:
+    1. Uses OpenAPIClientGenerator to create Python API client
+    2. Uses MCPToolMapper to generate enhanced MCPProjectConfig from client analysis
+    3. Uses MCPGenerator to generate the complete MCP server project
+    4. Overrides client generation to use the openapi-generator approach
     """
     
     def __init__(self):
         super().__init__()
         self.client_generator = OpenAPIClientGenerator()
-        self.tool_mapper = None
+        self.mcp_generator = None  # Will be instantiated when needed
         self.logger = logging.getLogger(__name__)
         
     def generate(self, project_path: Path, config: MCPProjectConfig, openapi_data: Dict[str, Any], 
                 include_examples: bool = False, max_tools: int = 50) -> GenerationResult:
-        """Generate MCP server using openapi-generator for client code
+        """Generate MCP server using openapi-generator for client and MCPGenerator for project
+        
+        New Architecture:
+        1. Use OpenAPIClientGenerator to create client code
+        2. Use MCPToolMapper to generate enhanced MCPProjectConfig from client analysis  
+        3. Use MCPGenerator to generate the complete MCP server project
         
         Args:
             project_path: Target project directory
@@ -855,7 +864,7 @@ class OpenAPIEnhancedGenerator(BaseGenerator):
         
         try:
             # Phase 1: Generate API client using openapi-generator
-            client_result = self._generate_api_client(project_path, config, openapi_data)
+            client_result = self._generate_api_client_with_generator(project_path, config, openapi_data)
             all_files_created.extend(client_result.files_created)
             all_errors.extend(client_result.errors)
             all_warnings.extend(client_result.warnings)
@@ -868,7 +877,7 @@ class OpenAPIEnhancedGenerator(BaseGenerator):
                     warnings=all_warnings
                 )
             
-            # Phase 2: Analyze generated client  
+            # Phase 2: Analyze generated client
             client_analysis = self._analyze_generated_client(project_path, config)
             if not client_analysis:
                 return GenerationResult(
@@ -878,26 +887,17 @@ class OpenAPIEnhancedGenerator(BaseGenerator):
                     warnings=all_warnings
                 )
             
-            # Phase 3: Generate MCP tool mappings
-            tools_result = self._generate_mcp_tools(project_path, config, client_analysis, max_tools)
-            all_files_created.extend(tools_result.files_created)
-            all_errors.extend(tools_result.errors)
-            all_warnings.extend(tools_result.warnings)
+            # Phase 3: Generate enhanced MCPProjectConfig using MCPToolMapper
+            enhanced_config = self._generate_enhanced_config(config, client_analysis, max_tools)
             
-            # Phase 4: Generate MCP server integration
-            server_result = self._generate_mcp_server(project_path, config, client_analysis)
-            all_files_created.extend(server_result.files_created)
-            all_errors.extend(server_result.errors)
-            all_warnings.extend(server_result.warnings)
-            
-            # Phase 5: Generate tests and documentation
-            docs_result = self._generate_documentation(project_path, config, client_analysis, include_examples)
-            all_files_created.extend(docs_result.files_created)
-            all_errors.extend(docs_result.errors)
-            all_warnings.extend(docs_result.warnings)
+            # Phase 4: Use MCPGenerator to generate the complete MCP project
+            mcp_result = self._generate_mcp_project(project_path, enhanced_config, openapi_data, include_examples)
+            all_files_created.extend(mcp_result.files_created)
+            all_errors.extend(mcp_result.errors)
+            all_warnings.extend(mcp_result.warnings)
             
             # Determine overall success
-            overall_success = client_result.success and tools_result.success and server_result.success
+            overall_success = client_result.success and mcp_result.success
             
             return GenerationResult(
                 success=overall_success,
@@ -915,7 +915,7 @@ class OpenAPIEnhancedGenerator(BaseGenerator):
                 warnings=all_warnings
             )
     
-    def _generate_api_client(self, project_path: Path, config: MCPProjectConfig, openapi_data: Dict[str, Any]) -> GenerationResult:
+    def _generate_api_client_with_generator(self, project_path: Path, config: MCPProjectConfig, openapi_data: Dict[str, Any]) -> GenerationResult:
         """Generate API client using openapi-generator"""
         try:
             # Prepare client output directory
@@ -1110,26 +1110,140 @@ class OpenAPIEnhancedGenerator(BaseGenerator):
                 warnings=[]
             )
     
-    def _combine_results(self, results: List[GenerationResult]) -> GenerationResult:
-        """Combine multiple generation results into one"""
-        all_files_created = []
-        all_errors = []
-        all_warnings = []
-        overall_success = True
+    def _generate_enhanced_config(self, base_config: MCPProjectConfig, client_analysis: ClientAnalysis, max_tools: int) -> MCPProjectConfig:
+        """Generate enhanced MCPProjectConfig using MCPToolMapper
         
-        for result in results:
-            all_files_created.extend(result.files_created)
-            all_errors.extend(result.errors)
-            all_warnings.extend(result.warnings)
-            if not result.success:
-                overall_success = False
+        Takes the base configuration and enhances it with information derived
+        from the client analysis using MCPToolMapper.
         
-        return GenerationResult(
-            success=overall_success,
-            files_created=all_files_created,
-            errors=all_errors,
-            warnings=all_warnings
-        )
+        Args:
+            base_config: Original project configuration
+            client_analysis: Analysis of generated API client
+            max_tools: Maximum number of tools to generate
+            
+        Returns:
+            MCPProjectConfig: Enhanced configuration
+        """
+        try:
+            from .mcp_tool_mapper import MCPToolMapper
+            
+            # Create tool mapper from client analysis
+            tool_mapper = MCPToolMapper(client_analysis)
+            
+            # Generate enhanced project config
+            enhanced_config = tool_mapper.generate_mcp_project_config(
+                project_name=base_config.project_name,
+                author=base_config.author,
+                description=base_config.description,
+                version=base_config.version,
+                # Pass through other base config settings
+                output_dir=base_config.output_dir,
+                include_docker=base_config.include_docker,
+                include_ci=base_config.include_ci,
+                test_framework=base_config.test_framework,
+                openapi_spec=base_config.openapi_spec,
+                openapi_url=base_config.openapi_url
+            )
+            
+            # Apply max_tools limit to the enhanced config
+            if enhanced_config.mcp_config.max_tools > max_tools:
+                enhanced_config.mcp_config.max_tools = max_tools
+            
+            self.logger.info(f"Enhanced config generated with {enhanced_config.mcp_config.max_tools} max tools")
+            return enhanced_config
+            
+        except Exception as e:
+            self.logger.error(f"Failed to generate enhanced config: {e}")
+            # Fallback to base config if enhancement fails
+            return base_config
+    
+    def _generate_mcp_project(self, project_path: Path, enhanced_config: MCPProjectConfig, 
+                             openapi_data: Dict[str, Any], include_examples: bool) -> GenerationResult:
+        """Generate complete MCP project using MCPGenerator
+        
+        Uses the enhanced configuration to generate the complete MCP project
+        including standard project structure, configuration, tests, and Docker setup.
+        
+        Args:
+            project_path: Target project directory
+            enhanced_config: Enhanced project configuration
+            openapi_data: Original OpenAPI specification
+            include_examples: Whether to generate examples
+            
+        Returns:
+            GenerationResult: Result of MCP project generation
+        """
+        try:
+            # Import MCPGenerator here to avoid circular imports
+            # Since we're already in generators.py, we can reference it directly
+            if self.mcp_generator is None:
+                self.mcp_generator = MCPGenerator()
+            
+            # Use MCPGenerator to generate the complete project
+            # This will use the enhanced config which contains the improved
+            # MCP integration settings derived from the client analysis
+            result = self.mcp_generator.generate_from_openapi(
+                project_path=project_path,
+                config=enhanced_config,
+                openapi_data=openapi_data,
+                include_examples=include_examples,
+                max_tools=enhanced_config.mcp_config.max_tools
+            )
+            
+            self.logger.info(f"MCP project generation completed: {result.success}")
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"Failed to generate MCP project: {e}")
+            return GenerationResult(
+                success=False,
+                files_created=[],
+                errors=[f"MCP project generation failed: {str(e)}"],
+                warnings=[]
+            )
+    
+    def _generate_openapi_client(self, project_path: Path, config, openapi_data: Dict[str, Any], 
+                                analysis: OpenAPIAnalysis, files_created: List[str]):
+        """Override parent's client generation to use openapi-generator
+        
+        This method overrides the parent's template-based client generation
+        to use openapi-generator for more robust client code generation.
+        """
+        try:
+            # Phase 1: Generate API client using openapi-generator
+            client_result = self._generate_api_client_with_generator(project_path, config, openapi_data)
+            if not client_result.success:
+                return client_result
+            
+            files_created.extend(client_result.files_created)
+            
+            # Phase 2: Analyze the generated client
+            client_analysis = self._analyze_generated_client(project_path, config)
+            if not client_analysis:
+                return GenerationResult(
+                    success=False,
+                    files_created=files_created,
+                    errors=["Failed to analyze generated client"],
+                    warnings=[]
+                )
+            
+            # Store client analysis for later use
+            self._client_analysis = client_analysis
+            
+            return GenerationResult(
+                success=True,
+                files_created=files_created,
+                errors=[],
+                warnings=[]
+            )
+            
+        except Exception as e:
+            return GenerationResult(
+                success=False,
+                files_created=files_created,
+                errors=[f"Enhanced client generation failed: {str(e)}"],
+                warnings=[]
+            )
 
 class MCPGenerator(BaseGenerator):
     """

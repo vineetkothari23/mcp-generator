@@ -1,52 +1,53 @@
 """
-Tests for OpenAPIEnhancedGenerator
+Unit tests for OpenAPIEnhancedGenerator (Refactored)
 
-Tests the enhanced OpenAPI generator that uses openapi-generator
-to create API clients and integrates them with MCP servers.
+Tests the new architecture where OpenAPIEnhancedGenerator uses:
+1. OpenAPIClientGenerator to create client code
+2. MCPToolMapper to generate MCPProjectConfig
+3. MCPGenerator to generate the complete MCP project
 """
 
 import pytest
-import json
+from unittest.mock import Mock, MagicMock, patch
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+import tempfile
+import json
 
-from mcp_cli.generators import OpenAPIEnhancedGenerator
-from mcp_cli.config import MCPProjectConfig, OpenAPIGeneratorConfig
-from mcp_cli.openapi_client_generator import ClientAnalysis, ApiClass, Operation, Model
+from mcp_cli.generators import OpenAPIEnhancedGenerator, GenerationResult
+from mcp_cli.openapi_client_generator import ClientAnalysis, Operation, ApiClass, Model
+from mcp_cli.config import MCPProjectConfig, MCPIntegrationConfig
+from mcp_cli.mcp_tool_mapper import MCPToolMapper
 
 
 @pytest.fixture
-def sample_openapi_spec():
-    """Sample OpenAPI specification for testing"""
+def sample_openapi_data():
+    """Sample OpenAPI specification data"""
     return {
         "openapi": "3.0.0",
         "info": {
             "title": "Pet Store API",
-            "version": "1.0.0",
-            "description": "A simple pet store API"
+            "description": "A simple pet store API",
+            "version": "1.0.0"
         },
         "servers": [
-            {"url": "https://api.petstore.com/v1"}
+            {"url": "https://api.petstore.example.com"}
         ],
         "paths": {
             "/pets": {
                 "get": {
                     "operationId": "listPets",
                     "summary": "List all pets",
-                    "responses": {
-                        "200": {
-                            "description": "A list of pets"
+                    "parameters": [
+                        {
+                            "name": "limit",
+                            "in": "query",
+                            "schema": {"type": "integer"}
                         }
-                    }
+                    ]
                 },
                 "post": {
                     "operationId": "createPet",
-                    "summary": "Create a pet",
-                    "responses": {
-                        "201": {
-                            "description": "Pet created"
-                        }
-                    }
+                    "summary": "Create a pet"
                 }
             }
         },
@@ -66,319 +67,209 @@ def sample_openapi_spec():
 
 @pytest.fixture
 def sample_client_analysis():
-    """Sample ClientAnalysis for testing"""
+    """Sample ClientAnalysis result"""
+    operations = [
+        Operation(
+            name="list_pets",
+            api_class="PetApi",
+            method="GET",
+            path="/pets",
+            summary="List all pets"
+        ),
+        Operation(
+            name="create_pet",
+            api_class="PetApi",
+            method="POST",
+            path="/pets",
+            summary="Create a pet"
+        )
+    ]
+    
     return ClientAnalysis(
-        api_classes=[
-            ApiClass(
-                name="PetsApi",
-                module="pets_api",
-                methods=["list_pets", "create_pet"]
-            )
-        ],
-        operations=[
-            Operation(
-                name="listPets",
-                api_class="PetsApi",
-                method="GET",
-                path="/pets",
-                summary="List all pets"
-            ),
-            Operation(
-                name="createPet",
-                api_class="PetsApi",
-                method="POST",
-                path="/pets",
-                summary="Create a pet"
-            )
-        ],
-        models=[
-            Model(
-                name="Pet",
-                properties=["id", "name"]
-            )
-        ],
-        client_package_name="pet_store_client",
-        base_url="https://api.petstore.com/v1"
+        client_package_name="petstore_client",
+        api_classes=[ApiClass(name="PetApi", module="pet_api", methods=["list_pets", "create_pet"])],
+        operations=operations,
+        models=[Model(name="Pet", properties=["id", "name"])],
+        base_url="https://api.petstore.example.com",
+        auth_schemes=["ApiKeyAuth"]
     )
 
 
 @pytest.fixture
-def sample_config():
-    """Sample MCPProjectConfig for testing"""
-    return MCPProjectConfig(
-        project_name="pet-store-mcp",
-        service_name="pet_store",
-        description="MCP server for Pet Store API",
-        author="Test Author",
-        openapi_config=OpenAPIGeneratorConfig(
-            package_name="pet_store_client"
-        )
-    )
+def enhanced_generator():
+    """Create OpenAPIEnhancedGenerator instance"""
+    return OpenAPIEnhancedGenerator()
 
 
-class TestOpenAPIEnhancedGenerator:
-    """Test cases for OpenAPIEnhancedGenerator"""
+class TestOpenAPIEnhancedGeneratorRefactored:
+    """Test the refactored OpenAPIEnhancedGenerator"""
     
-    def test_init(self):
-        """Test generator initialization"""
-        generator = OpenAPIEnhancedGenerator()
+    def test_generate_new_architecture(self, enhanced_generator, sample_openapi_data, sample_client_analysis):
+        """Test the new architecture flow"""
+        # Mock the client generator instance directly on the enhanced generator
+        enhanced_generator.client_generator = Mock()
         
-        assert generator.client_generator is not None
-        assert generator.tool_mapper is None
-        assert hasattr(generator, 'render_template')
-    
-    @patch('mcp_cli.generators.OpenAPIClientGenerator')
-    def test_generate_api_client_success(self, mock_client_gen_class, sample_config, sample_openapi_spec, tmp_path):
-        """Test successful API client generation"""
-        # Setup mocks
-        mock_client_gen = Mock()
-        mock_client_gen_class.return_value = mock_client_gen
-        mock_client_gen.generate_python_client.return_value = Mock(
+        # Mock client generation
+        enhanced_generator.client_generator.generate_python_client.return_value = GenerationResult(
             success=True,
-            files_created=["client.py", "models.py"],
+            files_created=["generated_client/api_client.py"],
             errors=[],
             warnings=[]
         )
         
-        generator = OpenAPIEnhancedGenerator()
-        generator.client_generator = mock_client_gen
+        # Mock client analysis
+        enhanced_generator.client_generator.parse_generated_client.return_value = sample_client_analysis
+        enhanced_generator.client_generator.validate_generated_client.return_value = Mock(is_valid=True, errors=[])
         
-        # Test
-        result = generator._generate_api_client(tmp_path, sample_config, sample_openapi_spec)
+        # Mock the MCP generator
+        enhanced_generator.mcp_generator = Mock()
+        enhanced_generator.mcp_generator.generate_from_openapi.return_value = GenerationResult(
+            success=True,
+            files_created=["project/server.py", "project/tools.py"],
+            errors=[],
+            warnings=[]
+        )
         
-        # Assertions
-        assert result.success is True
-        assert len(result.files_created) == 2
-        assert len(result.errors) == 0
-        mock_client_gen.generate_python_client.assert_called_once()
+        # Test the generation
+        project_path = Path("/tmp/test-project")
+        
+        # Create a temporary MCPProjectConfig for input
+        input_config = MCPProjectConfig(
+            project_name="test-project",
+            service_name="test_service", 
+            description="Test description",
+            author="Test Author"
+        )
+        
+        result = enhanced_generator.generate(
+            project_path=project_path,
+            config=input_config,
+            openapi_data=sample_openapi_data,
+            include_examples=True,
+            max_tools=50
+        )
+        
+        # Verify the new architecture flow
+        assert result.success
+        
+        # Verify OpenAPIClientGenerator was called
+        enhanced_generator.client_generator.generate_python_client.assert_called_once()
+        enhanced_generator.client_generator.parse_generated_client.assert_called_once()
+        
+        # Verify MCPGenerator was used
+        enhanced_generator.mcp_generator.generate_from_openapi.assert_called_once()
     
-    @patch('mcp_cli.generators.OpenAPIClientGenerator')
-    def test_generate_api_client_failure(self, mock_client_gen_class, sample_config, sample_openapi_spec, tmp_path):
-        """Test API client generation failure"""
-        # Setup mocks
-        mock_client_gen = Mock()
-        mock_client_gen_class.return_value = mock_client_gen
-        mock_client_gen.generate_python_client.return_value = Mock(
+    def test_client_generation_failure(self, enhanced_generator, sample_openapi_data):
+        """Test handling of client generation failure"""
+        # Mock the client generator to fail
+        enhanced_generator.client_generator = Mock()
+        enhanced_generator.client_generator.generate_python_client.return_value = GenerationResult(
             success=False,
             files_created=[],
-            errors=["Generation failed"],
+            errors=["Client generation failed"],
             warnings=[]
         )
         
-        generator = OpenAPIEnhancedGenerator()
-        generator.client_generator = mock_client_gen
+        # Test generation
+        project_path = Path("/tmp/test-project")
+        input_config = MCPProjectConfig(
+            project_name="test-project",
+            service_name="test_service",
+            description="Test description", 
+            author="Test Author"
+        )
         
-        # Test
-        result = generator._generate_api_client(tmp_path, sample_config, sample_openapi_spec)
+        result = enhanced_generator.generate(
+            project_path=project_path,
+            config=input_config,
+            openapi_data=sample_openapi_data
+        )
         
-        # Assertions
-        assert result.success is False
-        assert len(result.errors) == 1
-        assert "Generation failed" in result.errors
+        # Should fail gracefully
+        assert not result.success
+        assert any("Client generation failed" in error for error in result.errors)
     
-    @patch('mcp_cli.generators.OpenAPIClientGenerator')
-    def test_analyze_generated_client_success(self, mock_client_gen_class, sample_config, sample_client_analysis, tmp_path):
-        """Test successful client analysis"""
-        # Setup mocks
-        mock_client_gen = Mock()
-        mock_client_gen_class.return_value = mock_client_gen
-        mock_client_gen.parse_generated_client.return_value = sample_client_analysis
-        mock_client_gen.validate_generated_client.return_value = Mock(
-            is_valid=True,
+    def test_client_analysis_failure(self, enhanced_generator, sample_openapi_data):
+        """Test handling of client analysis failure"""
+        # Mock successful client generation but failed analysis
+        enhanced_generator.client_generator = Mock()
+        enhanced_generator.client_generator.generate_python_client.return_value = GenerationResult(
+            success=True,
+            files_created=["client.py"],
             errors=[],
             warnings=[]
         )
         
-        generator = OpenAPIEnhancedGenerator()
-        generator.client_generator = mock_client_gen
+        enhanced_generator.client_generator.parse_generated_client.return_value = None  # Analysis fails
         
-        # Test
-        result = generator._analyze_generated_client(tmp_path, sample_config)
-        
-        # Assertions
-        assert result is not None
-        assert result.client_package_name == "pet_store_client"
-        assert len(result.operations) == 2
-        mock_client_gen.parse_generated_client.assert_called_once()
-        mock_client_gen.validate_generated_client.assert_called_once()
-    
-    @patch('mcp_cli.generators.MCPToolMapper')
-    def test_generate_mcp_tools_success(self, mock_mapper_class, sample_config, sample_client_analysis, tmp_path):
-        """Test successful MCP tools generation"""
-        # Setup mocks
-        mock_mapper = Mock()
-        mock_mapper_class.return_value = mock_mapper = Mock()
-        mock_mapper.generate_tool_definitions.return_value = [
-            Mock(name="list_pets", description="List all pets"),
-            Mock(name="create_pet", description="Create a pet")
-        ]
-        
-        generator = OpenAPIEnhancedGenerator()
-        
-        # Mock template rendering
-        generator.render_template = Mock(return_value="# Generated tools code")
-        generator.write_file = Mock()
-        
-        # Test
-        result = generator._generate_mcp_tools(tmp_path, sample_config, sample_client_analysis, max_tools=50)
-        
-        # Assertions
-        assert result.success is True
-        assert len(result.files_created) == 1
-        generator.render_template.assert_called_once()
-        generator.write_file.assert_called_once()
-    
-    def test_generate_mcp_tools_max_tools_limit(self, sample_config, sample_client_analysis, tmp_path):
-        """Test MCP tools generation with max_tools limit"""
-        # Create more operations than max_tools
-        many_operations = [
-            Operation(name=f"operation_{i}", api_class="TestApi", method="GET", path=f"/test/{i}")
-            for i in range(10)
-        ]
-        sample_client_analysis.operations = many_operations
-        
-        with patch('mcp_cli.generators.MCPToolMapper') as mock_mapper_class:
-            mock_mapper = Mock()
-            mock_mapper_class.return_value = mock_mapper
-            mock_mapper.generate_tool_definitions.return_value = [
-                Mock(name=f"operation_{i}") for i in range(10)
-            ]
-            
-            generator = OpenAPIEnhancedGenerator()
-            generator.render_template = Mock(return_value="# Generated tools code")
-            generator.write_file = Mock()
-            
-            # Test with max_tools=5
-            result = generator._generate_mcp_tools(tmp_path, sample_config, sample_client_analysis, max_tools=5)
-            
-            # Should limit to 5 tools
-            assert result.success is True
-            # Verify the template was called with limited tools
-            call_args = generator.render_template.call_args
-            template_context = call_args[0][1]  # Second argument is the context dict
-            assert len(template_context['tool_definitions']) == 5
-    
-    def test_generate_mcp_server_success(self, sample_config, sample_client_analysis, tmp_path):
-        """Test successful MCP server generation"""
-        generator = OpenAPIEnhancedGenerator()
-        
-        # Mock template rendering
-        generator.render_template = Mock(side_effect=["# Server code", "# Init code"])
-        generator.write_file = Mock()
-        
-        # Test
-        result = generator._generate_mcp_server(tmp_path, sample_config, sample_client_analysis)
-        
-        # Assertions
-        assert result.success is True
-        assert len(result.files_created) == 2
-        assert generator.render_template.call_count == 2
-        assert generator.write_file.call_count == 2
-    
-    def test_generate_documentation_success(self, sample_config, sample_client_analysis, tmp_path):
-        """Test successful documentation generation"""
-        generator = OpenAPIEnhancedGenerator()
-        
-        # Mock template rendering
-        generator.render_template = Mock(side_effect=["# API docs", "# Usage examples"])
-        generator.write_file = Mock()
-        
-        # Test with examples
-        result = generator._generate_documentation(tmp_path, sample_config, sample_client_analysis, include_examples=True)
-        
-        # Assertions
-        assert result.success is True
-        assert len(result.files_created) == 2
-        assert generator.render_template.call_count == 2
-        assert generator.write_file.call_count == 2
-    
-    def test_generate_documentation_no_examples(self, sample_config, sample_client_analysis, tmp_path):
-        """Test documentation generation without examples"""
-        generator = OpenAPIEnhancedGenerator()
-        
-        # Mock template rendering
-        generator.render_template = Mock(return_value="# API docs")
-        generator.write_file = Mock()
-        
-        # Test without examples
-        result = generator._generate_documentation(tmp_path, sample_config, sample_client_analysis, include_examples=False)
-        
-        # Assertions
-        assert result.success is True
-        assert len(result.files_created) == 1
-        assert generator.render_template.call_count == 1
-        assert generator.write_file.call_count == 1
-    
-    @patch('mcp_cli.generators.OpenAPIClientGenerator')
-    @patch('mcp_cli.generators.MCPToolMapper')
-    def test_full_generate_success(self, mock_mapper_class, mock_client_gen_class, 
-                                  sample_config, sample_openapi_spec, sample_client_analysis, tmp_path):
-        """Test full generation process success"""
-        # Setup mocks
-        mock_client_gen = Mock()
-        mock_client_gen_class.return_value = mock_client_gen
-        mock_client_gen.generate_python_client.return_value = Mock(
-            success=True, files_created=["client.py"], errors=[], warnings=[]
-        )
-        mock_client_gen.parse_generated_client.return_value = sample_client_analysis
-        mock_client_gen.validate_generated_client.return_value = Mock(
-            is_valid=True, errors=[], warnings=[]
+        # Test generation
+        project_path = Path("/tmp/test-project") 
+        input_config = MCPProjectConfig(
+            project_name="test-project",
+            service_name="test_service",
+            description="Test description",
+            author="Test Author"
         )
         
-        mock_mapper = Mock()
-        mock_mapper_class.return_value = mock_mapper
-        mock_mapper.generate_tool_definitions.return_value = [Mock(name="test_tool")]
-        
-        generator = OpenAPIEnhancedGenerator()
-        generator.client_generator = mock_client_gen
-        generator.render_template = Mock(return_value="# Generated code")
-        generator.write_file = Mock()
-        
-        # Test
-        result = generator.generate(tmp_path, sample_config, sample_openapi_spec, 
-                                  include_examples=True, max_tools=50)
-        
-        # Assertions
-        assert result.success is True
-        assert len(result.files_created) > 0
-        assert len(result.errors) == 0
-    
-    @patch('mcp_cli.generators.OpenAPIClientGenerator')
-    def test_full_generate_client_failure(self, mock_client_gen_class, 
-                                         sample_config, sample_openapi_spec, tmp_path):
-        """Test full generation process with client generation failure"""
-        # Setup mocks
-        mock_client_gen = Mock()
-        mock_client_gen_class.return_value = mock_client_gen
-        mock_client_gen.generate_python_client.return_value = Mock(
-            success=False, files_created=[], errors=["Client generation failed"], warnings=[]
+        result = enhanced_generator.generate(
+            project_path=project_path,
+            config=input_config,
+            openapi_data=sample_openapi_data
         )
         
-        generator = OpenAPIEnhancedGenerator()
-        generator.client_generator = mock_client_gen
-        
-        # Test
-        result = generator.generate(tmp_path, sample_config, sample_openapi_spec)
-        
-        # Assertions
-        assert result.success is False
-        assert "API client generation failed - cannot proceed" in result.errors
+        # Should fail gracefully
+        assert not result.success
+        assert any("Failed to analyze generated client" in error for error in result.errors)
     
-    def test_combine_results(self):
-        """Test combining multiple generation results"""
-        from mcp_cli.generators import GenerationResult
+    def test_config_enhancement_from_analysis(self, enhanced_generator, sample_client_analysis):
+        """Test that the generator can enhance config from client analysis"""
+        # This tests the integration between MCPToolMapper and the generator
+        from mcp_cli.mcp_tool_mapper import MCPToolMapper
         
-        generator = OpenAPIEnhancedGenerator()
+        tool_mapper = MCPToolMapper(sample_client_analysis)
         
-        results = [
-            GenerationResult(True, ["file1.py"], [], ["warning1"]),
-            GenerationResult(True, ["file2.py"], [], []),
-            GenerationResult(False, [], ["error1"], ["warning2"])
-        ]
+        enhanced_config = tool_mapper.generate_mcp_project_config(
+            project_name="enhanced-project",
+            author="Enhanced Author"
+        )
         
-        combined = generator._combine_results(results)
+        assert enhanced_config.project_name == "enhanced-project"
+        assert enhanced_config.author == "Enhanced Author"
+        assert enhanced_config.service_name == "enhanced_project"
+        assert enhanced_config.openapi_config.package_name == "petstore_client"
+        assert enhanced_config.mcp_config.max_tools >= 2  # We have 2 operations
+
+
+class TestOpenAPIEnhancedGeneratorIntegration:
+    """Integration tests for the new architecture"""
+    
+    def test_integration_with_real_tool_mapper(self, enhanced_generator, sample_client_analysis):
+        """Test integration with real MCPToolMapper (not mocked)"""
+        from mcp_cli.mcp_tool_mapper import MCPToolMapper
         
-        assert combined.success is False  # One result failed
-        assert len(combined.files_created) == 2
-        assert len(combined.errors) == 1
-        assert len(combined.warnings) == 2 
+        # Create real tool mapper
+        tool_mapper = MCPToolMapper(sample_client_analysis)
+        
+        # Test config generation
+        config = tool_mapper.generate_mcp_project_config(
+            project_name="integration-test",
+            author="Integration Author",
+            description="Integration test project"
+        )
+        
+        # Verify config is properly generated
+        assert isinstance(config, MCPProjectConfig)
+        assert config.project_name == "integration-test"
+        assert config.service_name == "integration_test"
+        assert config.description == "Integration test project"
+        assert config.openapi_config.package_name == "petstore_client"
+        
+        # Test tool definitions
+        tool_definitions = tool_mapper.generate_tool_definitions()
+        assert len(tool_definitions) == 2
+        assert tool_definitions[0].name == "list_pets"
+        assert tool_definitions[1].name == "create_pet"
+
+
+if __name__ == "__main__":
+    pytest.main([__file__]) 
