@@ -61,7 +61,7 @@ class MCPCLI:
         self.template_dir = Path(__file__).parent / "templates"
         self.generators = {
             "structure": ProjectStructureGenerator(),
-            "openapi": OpenAPIGenerator(),
+            "openapi": OpenAPIEnhancedGenerator(),
             "tests": TestGenerator(),
             "docker": DockerGenerator(),
             "config": ConfigGenerator()
@@ -247,12 +247,9 @@ def from_openapi(ctx, spec, name, output_dir, author, generator_engine, async_cl
                 max_tools=max_tools
             )
         else:
-            # Use basic generator
-            project_path = _generate_standard_project(cli_instance, config)
-            
-            # Add OpenAPI-specific components using basic generator
-            cli_instance.generators["openapi"].generate(
-                Path(project_path), 
+            # Use basic mode of enhanced generator (same robust generation, simpler config)
+            project_path = _generate_openapi_project(
+                cli_instance, 
                 config, 
                 openapi_data,
                 include_examples=include_examples,
@@ -466,7 +463,7 @@ def _generate_openapi_project(
     max_tools: int
 ) -> str:
     """
-    Generate MCP server project from OpenAPI specification
+    Generate MCP server project from OpenAPI specification using OpenAPIEnhancedGenerator
     
     Args:
         cli_instance: CLI instance with generators
@@ -478,13 +475,14 @@ def _generate_openapi_project(
     Returns:
         str: Path to generated project
     """
-    from .generators import MCPGenerator
+    from .generators import OpenAPIEnhancedGenerator
     
     project_path = Path(config.output_dir) / config.project_name
     
-    # Use MCPGenerator with OpenAPI support for comprehensive project generation
-    mcp_generator = MCPGenerator()
-    result = mcp_generator.generate_from_openapi(
+    # Use OpenAPIEnhancedGenerator for comprehensive OpenAPI-based project generation
+    # This uses the new architecture: OpenAPIClientGenerator -> MCPToolMapper -> MCPGenerator
+    enhanced_generator = OpenAPIEnhancedGenerator()
+    result = enhanced_generator.generate(
         project_path, 
         config, 
         openapi_data,
