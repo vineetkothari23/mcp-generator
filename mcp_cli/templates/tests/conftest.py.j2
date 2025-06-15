@@ -14,9 +14,9 @@ from pathlib import Path
 from typing import Dict, Any
 
 from mcp.server import Server
-from src.mcp_{{ service_name }}.config import {{ service_name|pascal_case }}Config
-from src.mcp_{{ service_name }}.client import {{ service_name|pascal_case }}Client
-from src.mcp_{{ service_name }}.server import {{ service_name|pascal_case }}Server
+from mcp_{{ service_name }}.config import {{ service_name|pascal_case }}Config
+from mcp_{{ service_name }}.client import {{ service_name|pascal_case }}Client
+from mcp_{{ service_name }}.server import {{ service_name|pascal_case }}Server
 
 # Test configuration
 TEST_CONFIG = {
