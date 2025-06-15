@@ -12,7 +12,7 @@
 ## Code Quality Standards
 - Follow SOLID principles - keep code modular and reusable
 - Single responsibility - each function does one thing well
-- Write detailed comments with examples for every function
+- Write comments with details about what how and why, with examples for every function
 - Use simple, clear naming conventions
 - Design everything to be configuration-driven
 - Keep each class in a separate file
@@ -41,9 +41,12 @@
 
 ## Testing Guidelines
 1. Keep the unit tests minimum and what is needed
+2. Do not compromise on quality of tests with workaround. Ask for help if anything is missing or not as per expectation
 
 ## Remember
 - One feature, one function, one step at a time
 - Always ask before moving forward
 - Keep it simple and modular
 - Configuration over hard-coding
+- Quality and Resuabililty is the priority, not bandaid code/ workarounds
+- Absolutely Minimize redundant code. 

@@ -194,7 +194,8 @@ class OpenAPIClientGenerator:
                 capture_output=True,
                 text=True,
                 timeout=300,  # 5 minute timeout
-                cwd=output_dir.parent
+                cwd=output_dir.parent,
+                shell=True  # Required on Windows to find CLI tools
             )
             
             if result.returncode == 0:

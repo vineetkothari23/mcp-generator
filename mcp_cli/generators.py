@@ -863,13 +863,18 @@ class OpenAPIEnhancedGenerator(OpenAPIGenerator):
         all_warnings = []
         
         try:
+            print("🔧 OpenAPIEnhancedGenerator: Starting generation phases...")
+            
             # Phase 1: Generate API client using openapi-generator
+            print("📦 Phase 1: Generating API client with openapi-generator-cli...")
             client_result = self._generate_api_client_with_generator(project_path, config, openapi_data)
             all_files_created.extend(client_result.files_created)
             all_errors.extend(client_result.errors)
             all_warnings.extend(client_result.warnings)
+            print(f"✅ Phase 1 complete: {len(client_result.files_created)} files created, success={client_result.success}")
             
             if not client_result.success:
+                print("❌ Phase 1 failed - cannot proceed")
                 return GenerationResult(
                     success=False,
                     files_created=all_files_created,
@@ -878,23 +883,30 @@ class OpenAPIEnhancedGenerator(OpenAPIGenerator):
                 )
             
             # Phase 2: Analyze generated client
+            print("🔍 Phase 2: Analyzing generated client...")
             client_analysis = self._analyze_generated_client(project_path, config)
             if not client_analysis:
+                print("❌ Phase 2 failed - client analysis failed")
                 return GenerationResult(
                     success=False,
                     files_created=all_files_created,
                     errors=all_errors + ["Failed to analyze generated client"],
                     warnings=all_warnings
                 )
+            print(f"✅ Phase 2 complete: Found {len(client_analysis.operations)} operations")
             
             # Phase 3: Generate enhanced MCPProjectConfig using MCPToolMapper
+            print("⚙️ Phase 3: Generating enhanced configuration...")
             enhanced_config = self._generate_enhanced_config(config, client_analysis, max_tools)
+            print("✅ Phase 3 complete: Enhanced configuration generated")
             
             # Phase 4: Use MCPGenerator to generate the complete MCP project
+            print("🏗️ Phase 4: Generating complete MCP project...")
             mcp_result = self._generate_mcp_project(project_path, enhanced_config, openapi_data, include_examples)
             all_files_created.extend(mcp_result.files_created)
             all_errors.extend(mcp_result.errors)
             all_warnings.extend(mcp_result.warnings)
+            print(f"✅ Phase 4 complete: {len(mcp_result.files_created)} additional files created, success={mcp_result.success}")
             
             # Determine overall success
             overall_success = client_result.success and mcp_result.success
@@ -918,26 +930,41 @@ class OpenAPIEnhancedGenerator(OpenAPIGenerator):
     def _generate_api_client_with_generator(self, project_path: Path, config: MCPProjectConfig, openapi_data: Dict[str, Any]) -> GenerationResult:
         """Generate API client using openapi-generator"""
         try:
-            # Prepare client output directory
-            client_dir = config.get_client_package_path()
+            print("📦 Setting up client generation...")
+            
+            # Prepare client output directory - use project_path directly to avoid duplication
+            client_dir = project_path / "generated_client"
+            print(f"📁 Client output directory: {client_dir}")
             
             # Write OpenAPI spec to temporary file if needed
             if config.openapi_spec:
                 spec_path = config.openapi_spec
+                print(f"📄 Using provided OpenAPI spec: {spec_path}")
             else:
                 # Write openapi_data to temporary file
                 import tempfile
                 import json
+                print("📝 Writing OpenAPI data to temporary file...")
                 with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
                     json.dump(openapi_data, f, indent=2)
                     spec_path = f.name
+                print(f"📄 Temporary OpenAPI spec: {spec_path}")
             
             # Generate client using openapi-generator
+            print("🚀 Calling openapi-generator-cli (this may take 1-2 minutes)...")
+            print("⏳ Please wait while openapi-generator-cli processes the specification...")
+            
             result = self.client_generator.generate_python_client(
                 spec_path=spec_path,
                 output_dir=client_dir,
                 config=config.openapi_config
             )
+            
+            print(f"🎯 openapi-generator-cli completed: success={result.success}")
+            if result.errors:
+                print(f"⚠️ Errors: {result.errors}")
+            if result.warnings:
+                print(f"📝 Warnings: {len(result.warnings)} warnings")
             
             return result
             
@@ -952,7 +979,8 @@ class OpenAPIEnhancedGenerator(OpenAPIGenerator):
     def _analyze_generated_client(self, project_path: Path, config: MCPProjectConfig) -> Optional[ClientAnalysis]:
         """Analyze generated client to extract operations and models"""
         try:
-            client_dir = config.get_client_package_path()
+            # Use the same path as generation to avoid duplication
+            client_dir = project_path / "generated_client"
             
             # Parse the generated client
             client_analysis = self.client_generator.parse_generated_client(client_dir)
@@ -1182,12 +1210,10 @@ class OpenAPIEnhancedGenerator(OpenAPIGenerator):
             # Use MCPGenerator to generate the complete project
             # This will use the enhanced config which contains the improved
             # MCP integration settings derived from the client analysis
-            result = self.mcp_generator.generate_from_openapi(
+            # NOTE: Use generate() not generate_from_openapi() to avoid infinite recursion
+            result = self.mcp_generator.generate(
                 project_path=project_path,
-                config=enhanced_config,
-                openapi_data=openapi_data,
-                include_examples=include_examples,
-                max_tools=enhanced_config.mcp_config.max_tools
+                config=enhanced_config
             )
             
             self.logger.info(f"MCP project generation completed: {result.success}")
@@ -1257,6 +1283,7 @@ class MCPGenerator(BaseGenerator):
     def __init__(self):
         """Initialize MCP generator with component generators"""
         super().__init__()
+        self.logger = logging.getLogger(__name__)
         self.structure_generator = ProjectStructureGenerator()
         self.test_generator = TestGenerator()
         self.config_generator = ConfigGenerator()
@@ -1536,12 +1563,33 @@ class MCPGenerator(BaseGenerator):
         
         try:
             # Phase 1: Generate standard project structure first
-            standard_result = self.generate(project_path, config)
-            all_files_created.extend(standard_result.files_created)
-            all_errors.extend(standard_result.errors)
-            all_warnings.extend(standard_result.warnings)
+            # Direct call to avoid recursion - don't use self.generate()
+            structure_result = self._generate_project_structure(project_path, config)
+            all_files_created.extend(structure_result.files_created)
+            all_errors.extend(structure_result.errors)
+            all_warnings.extend(structure_result.warnings)
             
-            if not standard_result.success:
+            # Generate configuration
+            config_result = self._generate_configuration(project_path, config)
+            all_files_created.extend(config_result.files_created)
+            all_errors.extend(config_result.errors)
+            all_warnings.extend(config_result.warnings)
+            
+            # Generate tests
+            test_result = self._generate_tests(project_path, config)
+            all_files_created.extend(test_result.files_created)
+            all_errors.extend(test_result.errors)
+            all_warnings.extend(test_result.warnings)
+            
+            # Generate Docker (optional)
+            if config.include_docker:
+                docker_result = self._generate_docker(project_path, config)
+                all_files_created.extend(docker_result.files_created)
+                all_errors.extend(docker_result.errors)
+                all_warnings.extend(docker_result.warnings)
+            
+            standard_success = structure_result.success and config_result.success and test_result.success
+            if not standard_success:
                 all_warnings.append("Standard project generation had issues, continuing with OpenAPI generation")
             
             # Phase 2: Generate OpenAPI-enhanced components
@@ -1564,7 +1612,7 @@ class MCPGenerator(BaseGenerator):
                 all_files_created.append(summary_result)
             
             # Determine overall success
-            overall_success = standard_result.success and openapi_result.success
+            overall_success = standard_success and openapi_result.success
             
             if not overall_success:
                 all_errors.append("One or more components failed during OpenAPI project generation")
