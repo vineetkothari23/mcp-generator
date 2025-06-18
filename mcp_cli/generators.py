@@ -990,6 +990,9 @@ class OpenAPIEnhancedGenerator(OpenAPIGenerator):
             if not validation_result.is_valid:
                 self.logger.warning(f"Generated client validation issues: {validation_result.errors}")
             
+            # Store client analysis for later use in tool generation
+            self._client_analysis = client_analysis
+            
             return client_analysis
             
         except Exception as e:
@@ -1013,22 +1016,47 @@ class OpenAPIEnhancedGenerator(OpenAPIGenerator):
                 tool_definitions = tool_definitions[:max_tools]
                 self.logger.warning(f"Limited tools to {max_tools} (was {len(tool_definitions)})")
             
+            # Enhance operations with tool information for template
+            enhanced_operations = []
+            for i, operation in enumerate(client_analysis.operations):
+                if i < len(tool_definitions):
+                    tool_def = tool_definitions[i]
+                    enhanced_op = {
+                        'tool_name': tool_def.name,
+                        'operation_name': operation.name,
+                        'api_class': operation.api_class,
+                        'method': operation.method,
+                        'path': operation.path,
+                        'summary': operation.summary,
+                        'description': operation.description,
+                        'parameters': operation.parameters,
+                        'input_schema': tool_def.input_schema,
+                        'request_body_type': operation.request_body_type
+                    }
+                    enhanced_operations.append(enhanced_op)
+            
+            # Generate class name from service name
+            class_name = config.service_name.title().replace('_', '')
+            
             # Generate tools.py file
             service_dir = config.get_mcp_package_path()
             
             tools_content = self.render_template("openapi_enhanced/tools.py.j2", {
                 "service_name": config.service_name,
                 "project_name": config.project_name,
+                "class_name": class_name,
                 "client_package_name": client_analysis.client_package_name,
                 "tool_definitions": tool_definitions,
                 "api_classes": client_analysis.api_classes,
-                "operations": client_analysis.operations,
+                "operations": enhanced_operations,  # Use enhanced operations
                 "base_url": client_analysis.base_url,
                 "auth_schemes": client_analysis.auth_schemes
             })
             
             tools_path = service_dir / "tools.py"
             self.write_file(tools_path, tools_content)
+            
+            print(f"🔧 Generated tools.py with {len(enhanced_operations)} OpenAPI tools")
             
             return GenerationResult(
                 success=True,
@@ -1187,10 +1215,10 @@ class OpenAPIEnhancedGenerator(OpenAPIGenerator):
     
     def _generate_mcp_project(self, project_path: Path, enhanced_config: MCPProjectConfig, 
                              openapi_data: Dict[str, Any], include_examples: bool) -> GenerationResult:
-        """Generate complete MCP project using MCPGenerator
+        """Generate complete MCP project with OpenAPI tools
         
-        Uses the enhanced configuration to generate the complete MCP project
-        including standard project structure, configuration, tests, and Docker setup.
+        Generates the complete MCP project including standard project structure
+        AND OpenAPI-derived tools using the client analysis.
         
         Args:
             project_path: Target project directory
@@ -1202,22 +1230,73 @@ class OpenAPIEnhancedGenerator(OpenAPIGenerator):
             GenerationResult: Result of MCP project generation
         """
         try:
+            all_files_created = []
+            all_errors = []
+            all_warnings = []
+            
             # Import MCPGenerator here to avoid circular imports
-            # Since we're already in generators.py, we can reference it directly
             if self.mcp_generator is None:
                 self.mcp_generator = MCPGenerator()
             
-            # Use MCPGenerator to generate the complete project
-            # This will use the enhanced config which contains the improved
-            # MCP integration settings derived from the client analysis
-            # NOTE: Use generate() not generate_from_openapi() to avoid infinite recursion
-            result = self.mcp_generator.generate(
+            # Phase 4a: Generate standard MCP project structure
+            print("🏗️ Phase 4a: Generating standard project structure...")
+            standard_result = self.mcp_generator.generate(
                 project_path=project_path,
                 config=enhanced_config
             )
+            all_files_created.extend(standard_result.files_created)
+            all_errors.extend(standard_result.errors)
+            all_warnings.extend(standard_result.warnings)
+            print(f"✅ Phase 4a complete: {len(standard_result.files_created)} files created")
             
-            self.logger.info(f"MCP project generation completed: {result.success}")
-            return result
+            # Phase 4b: Generate OpenAPI-specific tools (override the default tools.py)
+            print("🔧 Phase 4b: Generating OpenAPI tools...")
+            if hasattr(self, '_client_analysis') and self._client_analysis:
+                tools_result = self._generate_mcp_tools(
+                    project_path, enhanced_config, self._client_analysis, enhanced_config.mcp_config.max_tools
+                )
+                all_files_created.extend(tools_result.files_created)
+                all_errors.extend(tools_result.errors)
+                all_warnings.extend(tools_result.warnings)
+                print(f"✅ Phase 4b complete: Generated tools from {len(self._client_analysis.operations)} operations")
+            else:
+                all_warnings.append("No client analysis available - tools.py will contain default tools only")
+                print("⚠️ Phase 4b warning: No client analysis available")
+            
+            # Phase 4c: Generate enhanced server (override the default server.py)
+            print("🖥️ Phase 4c: Generating enhanced server...")
+            if hasattr(self, '_client_analysis') and self._client_analysis:
+                server_result = self._generate_mcp_server(
+                    project_path, enhanced_config, self._client_analysis
+                )
+                all_files_created.extend(server_result.files_created)
+                all_errors.extend(server_result.errors)
+                all_warnings.extend(server_result.warnings)
+                print("✅ Phase 4c complete: Enhanced server generated")
+            
+            # Phase 4d: Generate documentation
+            if include_examples and hasattr(self, '_client_analysis') and self._client_analysis:
+                print("📚 Phase 4d: Generating documentation...")
+                docs_result = self._generate_documentation(
+                    project_path, enhanced_config, self._client_analysis, include_examples
+                )
+                all_files_created.extend(docs_result.files_created)
+                all_errors.extend(docs_result.errors)
+                all_warnings.extend(docs_result.warnings)
+                print("✅ Phase 4d complete: Documentation generated")
+            
+            # Determine overall success
+            overall_success = standard_result.success
+            if all_errors:
+                overall_success = False
+            
+            self.logger.info(f"Complete MCP project generation: success={overall_success}")
+            return GenerationResult(
+                success=overall_success,
+                files_created=all_files_created,
+                errors=all_errors,
+                warnings=all_warnings
+            )
             
         except Exception as e:
             self.logger.error(f"Failed to generate MCP project: {e}")

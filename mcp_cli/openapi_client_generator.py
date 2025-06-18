@@ -251,24 +251,35 @@ class OpenAPIClientGenerator:
         analysis = ClientAnalysis()
         
         try:
+            # Find the actual package directory (openapi-generator creates a subdirectory)
+            package_dir = self._find_package_directory(client_dir)
+            if not package_dir:
+                self.logger.error(f"Could not find package directory in {client_dir}")
+                return analysis
+            
             # Determine package name from directory structure
-            analysis.client_package_name = self._extract_package_name(client_dir)
+            analysis.client_package_name = package_dir.name
             
             # Find and parse API classes
-            api_dir = client_dir / "api"
+            api_dir = package_dir / "api"
             if api_dir.exists():
                 analysis.api_classes = self._parse_api_classes(api_dir)
                 analysis.operations = self._extract_operations_from_apis(analysis.api_classes)
             
             # Find and parse model classes
-            models_dir = client_dir / "models"
+            models_dir = package_dir / "models"
             if models_dir.exists():
                 analysis.models = self._parse_model_classes(models_dir)
             
             # Extract configuration information
-            config_file = client_dir / "configuration.py"
+            config_file = package_dir / "configuration.py"
             if config_file.exists():
                 analysis.base_url = self._extract_base_url(config_file)
+            
+            # Extract auth schemes from configuration
+            if config_file.exists():
+                auth_schemes = self._extract_auth_schemes(config_file)
+                analysis.auth_schemes = auth_schemes
             
             self.logger.info(f"Parsed client: {len(analysis.api_classes)} APIs, "
                            f"{len(analysis.operations)} operations, {len(analysis.models)} models")
@@ -299,7 +310,18 @@ class OpenAPIClientGenerator:
         suggestions = []
         
         try:
-            # Check required files exist
+            # Find the actual package directory
+            package_dir = self._find_package_directory(client_dir)
+            if not package_dir:
+                errors.append("Could not find package directory")
+                return ValidationResult(
+                    is_valid=False,
+                    errors=errors,
+                    warnings=warnings,
+                    suggestions=suggestions
+                )
+            
+            # Check required files exist in package directory
             required_files = [
                 "__init__.py",
                 "api_client.py", 
@@ -307,30 +329,30 @@ class OpenAPIClientGenerator:
             ]
             
             for required_file in required_files:
-                file_path = client_dir / required_file
+                file_path = package_dir / required_file
                 if not file_path.exists():
                     errors.append(f"Missing required file: {required_file}")
             
             # Check API directory
-            api_dir = client_dir / "api"
+            api_dir = package_dir / "api"
             if not api_dir.exists():
                 errors.append("Missing api directory")
             elif not any(api_dir.glob("*_api.py")):
                 warnings.append("No API files found in api directory")
             
             # Check models directory
-            models_dir = client_dir / "models"
+            models_dir = package_dir / "models"
             if not models_dir.exists():
                 warnings.append("Missing models directory")
             
             # Try to import the client (basic syntax check)
             try:
-                self._test_client_import(client_dir)
+                self._test_client_import(package_dir)
             except Exception as e:
                 errors.append(f"Client import failed: {str(e)}")
             
             # Check for common issues
-            if self._has_import_issues(client_dir):
+            if self._has_import_issues(package_dir):
                 warnings.append("Potential import issues detected")
             
             return ValidationResult(
@@ -404,18 +426,28 @@ class OpenAPIClientGenerator:
         
         return warnings
     
-    def _extract_package_name(self, client_dir: Path) -> str:
-        """Extract package name from generated client directory"""
-        # Look for setup.py or pyproject.toml
-        setup_py = client_dir / "setup.py"
-        if setup_py.exists():
-            content = setup_py.read_text()
-            match = re.search(r'name=["\']([^"\']+)["\']', content)
-            if match:
-                return match.group(1)
+    def _find_package_directory(self, client_dir: Path) -> Optional[Path]:
+        """Find the actual Python package directory created by openapi-generator"""
+        # openapi-generator typically creates a subdirectory with the package name
+        # Look for directories that contain __init__.py and api_client.py
         
-        # Fallback to directory name
-        return client_dir.name
+        for potential_package in client_dir.iterdir():
+            if potential_package.is_dir():
+                init_file = potential_package / "__init__.py"
+                api_client_file = potential_package / "api_client.py"
+                
+                if init_file.exists() and api_client_file.exists():
+                    self.logger.info(f"Found package directory: {potential_package}")
+                    return potential_package
+        
+        # Fallback: if no subdirectory found, assume client_dir is the package
+        init_file = client_dir / "__init__.py"
+        api_client_file = client_dir / "api_client.py"
+        
+        if init_file.exists() and api_client_file.exists():
+            return client_dir
+        
+        return None
     
     def _parse_api_classes(self, api_dir: Path) -> List[ApiClass]:
         """Parse API classes from generated api directory"""
@@ -546,6 +578,28 @@ class OpenAPIClientGenerator:
         except Exception as e:
             self.logger.warning(f"Could not extract base URL: {e}")
             return None
+    
+    def _extract_auth_schemes(self, config_file: Path) -> List[str]:
+        """Extract authentication schemes from configuration.py"""
+        auth_schemes = []
+        
+        try:
+            content = config_file.read_text()
+            
+            # Look for auth_settings method or AuthSettings type
+            if 'BearerAuth' in content:
+                auth_schemes.append('BearerAuth')
+            if 'ApiKey' in content or 'api_key' in content:
+                auth_schemes.append('ApiKey')
+            if 'BasicAuth' in content or 'basic' in content:
+                auth_schemes.append('BasicAuth')
+            if 'OAuth2' in content or 'oauth2' in content:
+                auth_schemes.append('OAuth2')
+                
+        except Exception as e:
+            self.logger.warning(f"Could not extract auth schemes: {e}")
+        
+        return auth_schemes
     
     def _test_client_import(self, client_dir: Path) -> None:
         """Test that the generated client can be imported (basic syntax check)"""

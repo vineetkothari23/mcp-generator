@@ -229,6 +229,157 @@ def check_openapi_generator_available():
 
 
 @pytest.mark.integration
+class TestOpenAPIEnhancedGeneratorComponents:
+    """Integration tests for individual components of OpenAPIEnhancedGenerator"""
+    
+    def test_mcp_tool_mapper_integration(self):
+        """
+        Test MCPToolMapper integration with ClientAnalysis
+        
+        This test validates the tool mapping component works correctly
+        without requiring openapi-generator-cli, making it faster and
+        more reliable for component-level testing.
+        """
+        print("\n🔍 Testing MCPToolMapper component integration...")
+        
+        from mcp_cli.mcp_tool_mapper import MCPToolMapper, ToolDefinition
+        from mcp_cli.openapi_client_generator import ClientAnalysis, Operation, ApiClass
+        
+        # Create a comprehensive test operation with multiple parameter types
+        test_operation = Operation(
+            name='getPets', 
+            api_class='PetsApi',
+            method='GET',
+            path='/pets',
+            parameters=[
+                {
+                    'name': 'limit', 
+                    'type': 'integer', 
+                    'in': 'query', 
+                    'required': False, 
+                    'description': 'Maximum number of pets to return'
+                },
+                {
+                    'name': 'status',
+                    'type': 'string',
+                    'in': 'query',
+                    'required': True,
+                    'description': 'Pet status filter'
+                }
+            ],
+            summary='List all pets',
+            description='Returns a paginated list of pets with optional filtering'
+        )
+        
+        # Create second operation to test multiple tools
+        test_operation_2 = Operation(
+            name='createPet',
+            api_class='PetsApi', 
+            method='POST',
+            path='/pets',
+            parameters=[
+                {
+                    'name': 'x-request-id',
+                    'type': 'string',
+                    'in': 'header',
+                    'required': False,
+                    'description': 'Request tracking ID'
+                }
+            ],
+            summary='Create a new pet',
+            description='Creates a new pet in the store',
+            request_body_type='CreatePetRequest'
+        )
+        
+        # Create test client analysis with multiple operations
+        test_analysis = ClientAnalysis(
+            client_package_name='pet_store_client',
+            base_url='https://api.petstore.example.com',
+            operations=[test_operation, test_operation_2],
+            api_classes=[
+                ApiClass(name='PetsApi', module='pets_api', methods=['getPets', 'createPet'])
+            ],
+            models=[
+                {'name': 'Pet', 'type': 'object', 'properties': {'id': 'integer', 'name': 'string'}},
+                {'name': 'CreatePetRequest', 'type': 'object', 'properties': {'name': 'string', 'tag': 'string'}}
+            ],
+            auth_schemes=['apiKey']
+        )
+        
+        print(f"📊 Created test analysis with {len(test_analysis.operations)} operations")
+        
+        # Test tool generation
+        print("🔧 Testing MCPToolMapper tool generation...")
+        mapper = MCPToolMapper(test_analysis)
+        tools = mapper.generate_tool_definitions()
+        
+        print(f"✅ Generated {len(tools)} tools:")
+        
+        # Validate tool generation results
+        assert len(tools) == 2, f"Expected 2 tools, got {len(tools)}"
+        
+        # Validate first tool (GET /pets)
+        get_pets_tool = tools[0]
+        assert get_pets_tool.name == "get_pets", f"Expected tool name 'get_pets', got '{get_pets_tool.name}'"
+        assert get_pets_tool.description == "List all pets", f"Unexpected description: {get_pets_tool.description}"
+        
+        # Validate tool schema
+        schema = get_pets_tool.input_schema
+        assert schema["type"] == "object", "Tool schema should be object type"
+        assert "properties" in schema, "Tool schema should have properties"
+        assert "limit" in schema["properties"], "Tool should have 'limit' parameter"
+        assert "status" in schema["properties"], "Tool should have 'status' parameter"
+        
+        # Validate required parameters (status is required, limit is optional)
+        assert "status" in schema["required"], "Required parameter 'status' should be in required list"
+        assert "limit" not in schema["required"], "Optional parameter 'limit' should not be in required list"
+        
+        print(f"  ✅ Tool 1: {get_pets_tool.name} - {get_pets_tool.description}")
+        print(f"    - Parameters: {list(schema['properties'].keys())}")
+        print(f"    - Required: {schema.get('required', [])}")
+        
+        # Validate second tool (POST /pets)
+        create_pet_tool = tools[1]
+        assert create_pet_tool.name == "create_pet", f"Expected tool name 'create_pet', got '{create_pet_tool.name}'"
+        assert create_pet_tool.description == "Create a new pet", f"Unexpected description: {create_pet_tool.description}"
+        
+        # Validate POST tool has body parameter
+        create_schema = create_pet_tool.input_schema
+        assert "body" in create_schema["properties"], "POST tool should have 'body' parameter"
+        assert "body" in create_schema["required"], "POST tool body should be required"
+        
+        print(f"  ✅ Tool 2: {create_pet_tool.name} - {create_pet_tool.description}")
+        print(f"    - Parameters: {list(create_schema['properties'].keys())}")
+        print(f"    - Required: {create_schema.get('required', [])}")
+        
+        # Test enhanced configuration generation
+        print("⚙️ Testing enhanced configuration generation...")
+        enhanced_config = mapper.generate_mcp_project_config(
+            project_name="test-pet-store",
+            author="Integration Test",
+            description="Test Pet Store MCP Server"
+        )
+        
+        assert enhanced_config.project_name == "test-pet-store"
+        assert enhanced_config.service_name == "test_pet_store"  # Should be sanitized
+        assert enhanced_config.mcp_config.max_tools >= 2, "Should accommodate generated tools"
+        assert enhanced_config.mcp_config.include_auth_tools == True, "Should include auth tools due to auth schemes"
+        
+        print(f"  ✅ Enhanced config: {enhanced_config.project_name}")
+        print(f"    - Service name: {enhanced_config.service_name}")
+        print(f"    - Max tools: {enhanced_config.mcp_config.max_tools}")
+        print(f"    - Auth tools: {enhanced_config.mcp_config.include_auth_tools}")
+        
+        # Test complexity estimation
+        print("📈 Testing complexity estimation...")
+        complexity = mapper.estimate_complexity()
+        assert complexity in ["Simple", "Medium", "Complex", "Very Complex"], f"Invalid complexity: {complexity}"
+        print(f"  ✅ Estimated complexity: {complexity}")
+        
+        print("🎉 MCPToolMapper component integration test passed!")
+
+
+@pytest.mark.integration
 @pytest.mark.slow
 @pytest.mark.skipif(
     not check_openapi_generator_available(),
