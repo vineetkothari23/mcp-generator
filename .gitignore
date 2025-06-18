@@ -1,3 +1,7 @@
+# Test generated files
+test-mcp-server/
+petstore-mcp-server/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
