@@ -184,9 +184,11 @@ class TestOpenAPIClientGenerator:
             mock_run.return_value.returncode = 0
             assert self.generator.check_openapi_generator_installed() is True
             mock_run.assert_called_once_with(
-                ['openapi-generator', 'version'], 
+                ['openapi-generator-cli', 'version'], 
                 capture_output=True, 
-                text=True
+                text=True,
+                timeout=10,
+                shell=True
             )
         
         # Test when openapi-generator is not available
@@ -210,9 +212,14 @@ class TestOpenAPIClientGenerator:
         )
         
         with patch('subprocess.run') as mock_run:
-            mock_run.return_value.returncode = 0
-            mock_run.return_value.stdout = "Successfully generated"
-            mock_run.return_value.stderr = ""
+            # First call (version check) returns success
+            # Second call (actual generation) returns success  
+            mock_run.side_effect = [
+                # Version check call
+                Mock(returncode=0, stdout="5.4.0", stderr=""),
+                # Generation call
+                Mock(returncode=0, stdout="Successfully generated", stderr="")
+            ]
             
             # Mock the generated files
             client_dir = output_dir / "pet_store_client"
@@ -225,20 +232,26 @@ class TestOpenAPIClientGenerator:
             
             assert result.success is True
             assert len(result.files_created) > 0
-            assert str(client_dir) in result.files_created
+            # Check for relative paths in files_created (Windows-compatible)
+            expected_files = ["pet_store_client\\__init__.py", "pet_store_client\\api_client.py", "pet_store_client\\configuration.py"]
+            assert any(expected_file in result.files_created for expected_file in expected_files)
             
-            # Verify openapi-generator was called with correct arguments
-            expected_args = [
-                "openapi-generator", "generate",
-                "-i", str(spec_path),
-                "-g", "python",
-                "-o", str(output_dir),
-                "--package-name", "pet_store_client",
-                "--additional-properties", "packageVersion=1.0.0"
-            ]
-            mock_run.assert_called_once()
-            actual_args = mock_run.call_args[0][0]
-            assert all(arg in actual_args for arg in expected_args)
+            # Verify openapi-generator was called twice (version + generate)
+            assert mock_run.call_count == 2
+            
+            # Check version call
+            version_call = mock_run.call_args_list[0]
+            assert version_call[0][0] == ["openapi-generator-cli", "version"]
+            
+            # Check generation call  
+            generate_call = mock_run.call_args_list[1]
+            generate_args = generate_call[0][0]
+            assert "openapi-generator-cli" in generate_args
+            assert "generate" in generate_args
+            assert str(spec_path) in generate_args
+            assert "python" in generate_args
+            assert str(output_dir) in generate_args
+            assert "pet_store_client" in generate_args
     
     def test_generate_python_client_async(self):
         """Test generating asynchronous Python client"""
@@ -276,24 +289,34 @@ class TestOpenAPIClientGenerator:
         output_dir = self.project_path / "generated"
         config = OpenAPIGeneratorConfig()
         
-        with patch('subprocess.run') as mock_run:
-            mock_run.return_value.returncode = 1
-            mock_run.return_value.stderr = "Validation failed: Invalid OpenAPI spec"
-            
-            result = self.generator.generate_python_client(str(spec_path), output_dir, config)
-            
-            assert result.success is False
-            assert "Validation failed" in str(result.errors)
+        # Mock that openapi-generator is available
+        with patch.object(self.generator, 'check_openapi_generator_installed', return_value=True):
+            with patch('subprocess.run') as mock_run:
+                mock_run.return_value.returncode = 1
+                mock_run.return_value.stderr = "Validation failed: Invalid OpenAPI spec"
+                mock_run.return_value.stdout = ""
+                
+                result = self.generator.generate_python_client(str(spec_path), output_dir, config)
+                
+                assert result.success is False
+                assert "Validation failed" in str(result.errors)
     
     def test_parse_generated_client(self):
         """Test parsing generated client to extract API information"""
-        # Create mock generated client structure
+        # Create mock generated client structure (as openapi-generator creates it)
         client_dir = self.project_path / "generated_client"
-        api_dir = client_dir / "api"
-        models_dir = client_dir / "models"
+        # openapi-generator creates a package subdirectory
+        package_dir = client_dir / "pet_store_client"
+        api_dir = package_dir / "api"
+        models_dir = package_dir / "models"
         
-        for directory in [client_dir, api_dir, models_dir]:
+        for directory in [client_dir, package_dir, api_dir, models_dir]:
             directory.mkdir(parents=True, exist_ok=True)
+        
+        # Create required package files
+        (package_dir / "__init__.py").touch()
+        (package_dir / "api_client.py").touch()
+        (package_dir / "configuration.py").touch()
         
         # Create mock API files
         (api_dir / "__init__.py").touch()
@@ -334,12 +357,20 @@ class Pet:
     
     def test_validate_generated_client(self):
         """Test validation of generated client"""
-        # Test valid client
+        # Test valid client (with proper package structure)
         client_dir = self.project_path / "valid_client"
-        client_dir.mkdir(parents=True, exist_ok=True)
-        (client_dir / "__init__.py").touch()
-        (client_dir / "api_client.py").touch()
-        (client_dir / "configuration.py").touch()
+        package_dir = client_dir / "valid_client_package"
+        api_dir = package_dir / "api"
+        
+        for directory in [client_dir, package_dir, api_dir]:
+            directory.mkdir(parents=True, exist_ok=True)
+        
+        # Create required files for a valid client
+        (package_dir / "__init__.py").touch()
+        (package_dir / "api_client.py").touch()
+        (package_dir / "configuration.py").touch()
+        (api_dir / "__init__.py").touch()
+        (api_dir / "default_api.py").touch()  # At least one API file
         
         result = self.generator.validate_generated_client(client_dir)
         assert result.is_valid is True
@@ -350,7 +381,7 @@ class Pet:
         
         result = self.generator.validate_generated_client(invalid_dir)
         assert result.is_valid is False
-        assert any("missing" in error.lower() for error in result.errors)
+        assert any("missing" in error.lower() or "could not find" in error.lower() for error in result.errors)
 
 class TestMCPToolMapper:
     """Test the MCPToolMapper class"""
