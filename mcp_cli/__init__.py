@@ -4,11 +4,16 @@ MCP CLI - Model Context Protocol Server Generator
 A command-line tool for generating MCP servers from templates or OpenAPI specifications.
 Provides standardized project structure, comprehensive testing, and deployment ready code.
 
-Version: 1.0.0
 Author: AI Development Team
 """
 
-__version__ = "1.0.0"
+# Import version dynamically from package metadata (pyproject.toml)
+try:
+    from importlib.metadata import version
+    __version__ = version("mcp-cli")
+except ImportError:
+    # Fallback for development or when package not installed
+    __version__ = "1.0.1"
 __author__ = "AI Development Team"
 __description__ = "CLI tool for generating MCP (Model Context Protocol) servers"
 

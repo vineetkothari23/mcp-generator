@@ -9,7 +9,6 @@ This CLI tool provides commands to:
 4. Validate and test MCP server configurations
 
 Author: AI Development Team
-Version: 1.0.0
 """
 
 import click
@@ -24,6 +23,7 @@ from dataclasses import dataclass
 from jinja2 import Environment, FileSystemLoader
 import subprocess
 import shutil
+from . import __version__
 from .openapi_client_generator import OpenAPIClientGenerator
 from .generators import OpenAPIEnhancedGenerator
 from .mcp_tool_mapper import MCPToolMapper
@@ -98,7 +98,7 @@ class MCPCLI:
 
 # CLI Commands using Click
 @click.group()
-@click.version_option(version="1.0.0", prog_name="mcp-cli")
+@click.version_option(version=__version__, prog_name="mcp-cli")
 @click.pass_context
 def cli(ctx):
     """
