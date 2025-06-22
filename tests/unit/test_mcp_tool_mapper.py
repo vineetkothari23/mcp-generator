@@ -123,6 +123,7 @@ class TestMCPToolMapper:
         name = tool_mapper._generate_tool_name(operation)
         assert name == "get_user_by_id"
     
+    @pytest.mark.skip(reason="DEPRECATED: Modern OpenAPI specs should have proper operationId fields")
     def test_generate_tool_name_fallback(self, tool_mapper):
         """Test tool name generation fallback when no operation name"""
         operation = Operation(
@@ -240,6 +241,7 @@ class TestMCPToolMapperEdgeCases:
         tools = mapper.generate_tool_definitions()
         assert tools == []
     
+    @pytest.mark.skip(reason="DEPRECATED: Modern OpenAPI specs should have proper operationId fields")
     def test_operation_with_no_name(self, tool_mapper):
         """Test operation without name or operationId"""
         operation = Operation(

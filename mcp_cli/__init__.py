@@ -20,7 +20,7 @@ __description__ = "CLI tool for generating MCP (Model Context Protocol) servers"
 from .generators import (
     ProjectStructureGenerator,
     OpenAPIGenerator,
-    TestGenerator,
+    MCSTestSuiteGenerator,
     DockerGenerator,
     ConfigGenerator
 )
@@ -33,7 +33,7 @@ __all__ = [
     "__description__",
     "ProjectStructureGenerator",
     "OpenAPIGenerator",
-    "TestGenerator",
+    "MCSTestSuiteGenerator",
     "DockerGenerator",
     "ConfigGenerator",
     "OpenAPIValidator",

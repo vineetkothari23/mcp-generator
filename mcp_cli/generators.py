@@ -592,7 +592,7 @@ class OpenAPIGenerator(BaseGenerator):
         # TODO: Create OpenAPI-specific config template
         pass
 
-class TestGenerator(BaseGenerator):
+class MCSTestSuiteGenerator(BaseGenerator):
     """Generator for comprehensive test suites"""
     
     def generate(self, project_path: Path, config: MCPProjectConfig) -> GenerationResult:

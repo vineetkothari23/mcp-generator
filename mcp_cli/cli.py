@@ -32,7 +32,7 @@ from .mcp_tool_mapper import MCPToolMapper
 from .generators import (
     ProjectStructureGenerator,
     OpenAPIGenerator,
-    TestGenerator,
+    MCSTestSuiteGenerator,
     DockerGenerator,
     ConfigGenerator
 )
@@ -62,7 +62,7 @@ class MCPCLI:
         self.generators = {
             "structure": ProjectStructureGenerator(),
             "openapi": OpenAPIEnhancedGenerator(),
-            "tests": TestGenerator(),
+            "tests": MCSTestSuiteGenerator(),
             "docker": DockerGenerator(),
             "config": ConfigGenerator()
         }

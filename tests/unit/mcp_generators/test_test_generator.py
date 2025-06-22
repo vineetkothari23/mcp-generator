@@ -8,7 +8,7 @@ import pytest
 import tempfile
 from unittest.mock import Mock, patch, call
 from pathlib import Path
-from mcp_cli.generators import TestGenerator, GenerationResult
+from mcp_cli.generators import MCSTestSuiteGenerator, GenerationResult
 from mcp_cli.config import MCPProjectConfig
 
 
@@ -17,8 +17,8 @@ class TestTestGenerator:
     
     @pytest.fixture
     def test_generator(self):
-        """Create a TestGenerator instance for testing"""
-        return TestGenerator()
+        """Create a TestSuiteGenerator instance for testing"""
+        return TestSuiteGenerator()
     
     @pytest.fixture
     def mock_config(self):
