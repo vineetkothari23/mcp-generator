@@ -343,8 +343,16 @@ class OpenAPIGenerator(BaseGenerator):
         
         for path, methods in paths.items():
             for method, operation in methods.items():
+                # Skip path-level parameters (not HTTP methods)
+                if method == 'parameters':
+                    continue
+                    
+                # Check if operation is a dict (actual HTTP method operation)
+                if not isinstance(operation, dict):
+                    continue
+                
                 if method.upper() in ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']:
-                    endpoints.append({
+                    endpoint_data = {
                         'path': path,
                         'method': method.upper(),
                         'operation_id': operation.get('operationId'),
@@ -353,7 +361,8 @@ class OpenAPIGenerator(BaseGenerator):
                         'parameters': operation.get('parameters', []),
                         'request_body': operation.get('requestBody'),
                         'responses': operation.get('responses', {})
-                    })
+                    }
+                    endpoints.append(endpoint_data)
                     tools_count += 1
         
         # Analyze models

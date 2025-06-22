@@ -1,0 +1,269 @@
+openapi: 3.0.0
+info:
+  title: Posts API
+  version: 1.0.0
+  description: API for managing blog posts, including comments and user interactions
+
+servers:
+  - url: /api/posts
+    description: Posts API endpoints
+
+components:
+  securitySchemes:
+    BasicAuth:
+      type: http
+      scheme: basic
+
+  schemas:
+    Post:
+      type: object
+      required:
+        - title
+        - content
+        - author
+      properties:
+        _id:
+          type: string
+          description: Unique identifier for the post
+        title:
+          type: string
+          description: Title of the post
+        content:
+          type: string
+          description: Content of the post
+        thumbnail:
+          type: object
+          properties:
+            filename:
+              type: string
+            secure_url:
+              type: string
+        author:
+          type: object
+          properties:
+            _id:
+              type: string
+            name:
+              type: string
+            email:
+              type: string
+        date:
+          type: string
+          format: date-time
+        likes:
+          type: integer
+          default: 0
+        likedBy:
+          type: array
+          items:
+            type: string
+        views:
+          type: integer
+          default: 0
+        comments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Comment'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Comment:
+      type: object
+      required:
+        - content
+        - author
+        - post
+      properties:
+        _id:
+          type: string
+        content:
+          type: string
+        author:
+          type: object
+          properties:
+            _id:
+              type: string
+            name:
+              type: string
+        post:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      properties:
+        msg:
+          type: string
+        error:
+          type: string
+
+paths:
+  /:
+    post:
+      operationId: createPost
+      summary: Create a new post
+      description: Creates a new blog post with title, content, and optional thumbnail
+      security:
+        - BasicAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - title
+                - content
+              properties:
+                title:
+                  type: string
+                  description: Title of the post
+                content:
+                  type: string
+                  description: Content of the post (HTML format)
+                thumbnail:
+                  type: object
+                  properties:
+                    filename:
+                      type: string
+                    secure_url:
+                      type: string
+      responses:
+        '201':
+          description: Post created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  msg:
+                    type: string
+                  post:
+                    $ref: '#/components/schemas/Post'
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Post ID
+
+    get:
+      operationId: getPostById
+      summary: Get a post by ID
+      description: Retrieves a post by its ID and increments the view count
+      responses:
+        '200':
+          description: Post retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Post'
+                  - type: object
+                    properties:
+                      likedByUser:
+                        type: boolean
+        '404':
+          description: Post not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      operationId: updatePost
+      summary: Update a post
+      description: Updates a post (requires author role)
+      security:
+        - BasicAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - title
+                - content
+              properties:
+                title:
+                  type: string
+                content:
+                  type: string
+      responses:
+        '200':
+          description: Post updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  msg:
+                    type: string
+                  post:
+                    $ref: '#/components/schemas/Post'
+        '403':
+          description: Unauthorized - Requires author role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Post not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      operationId: deletePost
+      summary: Delete a post
+      description: Deletes a post and its associated comments (requires author role)
+      security:
+        - BasicAuth: []
+      responses:
+        '200':
+          description: Post and comments deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  msg:
+                    type: string
+        '403':
+          description: Unauthorized - Requires author role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Post not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'

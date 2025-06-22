@@ -122,7 +122,7 @@ class OpenAPIClientGenerator:
                 ['openapi-generator-cli', 'version'],
                 capture_output=True,
                 text=True,
-                timeout=120,
+                timeout=300,
                 shell=True
             )
             if result.returncode == 0:
