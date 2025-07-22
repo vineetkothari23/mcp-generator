@@ -999,14 +999,74 @@ class OpenAPIEnhancedGenerator(OpenAPIGenerator):
             if not validation_result.is_valid:
                 self.logger.warning(f"Generated client validation issues: {validation_result.errors}")
             
-            # Store client analysis for later use in tool generation
-            self._client_analysis = client_analysis
+            # Filter out excluded methods (like _with_http_info) to avoid duplicate tools
+            filtered_analysis = self._filter_excluded_methods(client_analysis, config)
             
-            return client_analysis
+            # Store filtered client analysis for later use in tool generation
+            self._client_analysis = filtered_analysis
+            
+            return filtered_analysis
             
         except Exception as e:
             self.logger.error(f"Failed to analyze generated client: {e}")
             return None
+    
+    def _filter_excluded_methods(self, client_analysis: ClientAnalysis, config: MCPProjectConfig) -> ClientAnalysis:
+        """
+        Filter out methods that match exclusion patterns from MCPIntegrationConfig
+        
+        This removes duplicate methods like 'get_posts_with_http_info' when 'get_posts' exists,
+        keeping only the main methods for cleaner MCP tools.
+        
+        Args:
+            client_analysis: Original client analysis from openapi-generator
+            config: Project configuration with MCP integration settings
+            
+        Returns:
+            ClientAnalysis: Filtered analysis with excluded methods removed
+        """
+        if not config.mcp_config.excluded_method_patterns:
+            return client_analysis
+        
+        # Create a filtered copy of the client analysis
+        filtered_analysis = ClientAnalysis(
+            api_classes=[],
+            operations=[],
+            models=client_analysis.models,  # Models don't need filtering
+            client_package_name=client_analysis.client_package_name,
+            base_url=client_analysis.base_url,
+            auth_schemes=client_analysis.auth_schemes
+        )
+        
+        # Filter operations
+        for operation in client_analysis.operations:
+            if not config.mcp_config.is_method_excluded(operation.name):
+                filtered_analysis.operations.append(operation)
+            else:
+                self.logger.debug(f"Excluding operation: {operation.name} (matches exclusion pattern)")
+        
+        # Filter API class methods
+        from .openapi_client_generator import ApiClass
+        for api_class in client_analysis.api_classes:
+            filtered_methods = []
+            for method_name in api_class.methods:
+                if not config.mcp_config.is_method_excluded(method_name):
+                    filtered_methods.append(method_name)
+                else:
+                    self.logger.debug(f"Excluding method: {api_class.name}.{method_name} (matches exclusion pattern)")
+            
+            # Only include API class if it has remaining methods
+            if filtered_methods:
+                filtered_api_class = ApiClass(
+                    name=api_class.name,
+                    module=api_class.module,
+                    methods=filtered_methods,
+                    file_path=api_class.file_path
+                )
+                filtered_analysis.api_classes.append(filtered_api_class)
+        
+        self.logger.info(f"Filtered methods: {len(client_analysis.operations)} -> {len(filtered_analysis.operations)} operations")
+        return filtered_analysis
     
     def _generate_mcp_tools(self, project_path: Path, config: MCPProjectConfig, 
                            client_analysis: ClientAnalysis, max_tools: int) -> GenerationResult:

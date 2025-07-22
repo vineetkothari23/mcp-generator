@@ -153,6 +153,14 @@ class MCPIntegrationConfig:
     max_tools: int = 50
     max_parameters_per_tool: int = 20
     
+    # Method filtering patterns (to avoid duplicate tools)
+    excluded_method_patterns: List[str] = field(default_factory=lambda: [
+        "*_with_http_info",  # OpenAPI-generator HTTP info variants
+        "*_with_http_response",  # Alternative HTTP response variants
+        "*_async",  # Async variants when sync is preferred
+        "_*"  # Private methods (as additional safety)
+    ])
+    
     # Tool naming and organization
     tool_naming_convention: str = "operation_id"  # "operation_id", "path_method", "custom"
     tool_prefix: str = ""
@@ -273,6 +281,29 @@ class MCPIntegrationConfig:
                 return False
         
         return True
+    
+    def is_method_excluded(self, method_name: str) -> bool:
+        """
+        Check if a method name matches exclusion patterns
+        
+        Args:
+            method_name: Name of the method to check
+            
+        Returns:
+            bool: True if method should be excluded from tool generation
+            
+        Examples:
+            config = MCPIntegrationConfig()
+            config.is_method_excluded("get_posts_with_http_info")  # True
+            config.is_method_excluded("get_posts")  # False
+            config.is_method_excluded("list_users_async")  # True (if pattern exists)
+        """
+        import fnmatch
+        
+        for pattern in self.excluded_method_patterns:
+            if fnmatch.fnmatch(method_name, pattern):
+                return True
+        return False
     
     @classmethod
     def minimal(cls) -> "MCPIntegrationConfig":
