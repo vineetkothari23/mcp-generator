@@ -158,7 +158,8 @@ class MCPIntegrationConfig:
         "*_with_http_info",  # OpenAPI-generator HTTP info variants
         "*_with_http_response",  # Alternative HTTP response variants
         "*_async",  # Async variants when sync is preferred
-        "_*"  # Private methods (as additional safety)
+        "_*",  # Private methods (as additional safety)
+        "*_without_preload_content" 
     ])
     
     # Tool naming and organization

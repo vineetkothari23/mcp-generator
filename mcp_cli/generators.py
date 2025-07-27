@@ -1433,7 +1433,7 @@ class MCPGenerator(BaseGenerator):
         super().__init__()
         self.logger = logging.getLogger(__name__)
         self.structure_generator = ProjectStructureGenerator()
-        self.test_generator = TestGenerator()
+        self.test_generator = MCSTestSuiteGenerator()
         self.config_generator = ConfigGenerator()
         self.docker_generator = DockerGenerator()
         self.openapi_enhanced_generator = OpenAPIEnhancedGenerator()
@@ -1566,7 +1566,7 @@ class MCPGenerator(BaseGenerator):
             )
     
     def _generate_tests(self, project_path: Path, config: MCPProjectConfig) -> GenerationResult:
-        """Generate test framework using TestGenerator"""
+        """Generate test framework using MCSTestSuiteGenerator"""
         try:
             return self.test_generator.generate(project_path, config)
         except Exception as e:

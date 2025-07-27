@@ -122,8 +122,7 @@ class OpenAPIClientGenerator:
                 ['openapi-generator-cli', 'version'],
                 capture_output=True,
                 text=True,
-                timeout=300,
-                shell=True
+                timeout=300
             )
             if result.returncode == 0:
                 version = result.stdout.strip()
@@ -194,8 +193,7 @@ class OpenAPIClientGenerator:
                 capture_output=True,
                 text=True,
                 timeout=300,  # 5 minute timeout
-                cwd=output_dir.parent,
-                shell=True  # Required on Windows to find CLI tools
+                cwd=output_dir.parent
             )
             
             if result.returncode == 0:
